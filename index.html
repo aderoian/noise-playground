@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Noise Playground</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div class="viewport-wrap viewport-fullscreen" id="viewport-wrap">
+        <canvas
+          id="view"
+          tabindex="0"
+          aria-label="Noise preview. Arrow keys pan the field offset. Click to focus."
+        ></canvas>
+      </div>
+      <aside class="panel" aria-label="Parameters">
+        <div class="panel-top">
+          <h1>Noise Playground</h1>
+          <p class="sub">
+            OpenSimplex2 (K.jpg GLSL) + fractal, rigid, cellular &mdash; live
+            preview
+          </p>
+        </div>
+        <div id="control-root"></div>
+      </aside>
+      <div id="diagnostics" class="diagnostics" role="status"></div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

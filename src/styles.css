@@ -1,0 +1,244 @@
+:root {
+  color-scheme: dark;
+  --bg: #0e1116;
+  --panel: #161b22;
+  --border: #2d333b;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+  /* Match .panel width so the diagnostics strip lines up with the canvas edge */
+  --panel-w: min(360px, 44vw);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+#app {
+  position: relative;
+  height: 100%;
+  min-height: 100dvh;
+  overflow: hidden;
+}
+
+/* Full-viewport WebGL: fixed to the screen */
+.viewport-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: #000;
+}
+
+#view {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  outline: none;
+}
+
+#view:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* Control panel: fixed column, independent scroll */
+.panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 2;
+  width: var(--panel-w);
+  min-width: min(300px, 100%);
+  max-width: 420px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.45);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 0.75rem 1.5rem;
+}
+
+.panel-top {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 -0.75rem 0.5rem;
+  padding: 0.75rem 0.75rem 0.65rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 8px 12px -8px rgba(0, 0, 0, 0.5);
+}
+.panel-top h1 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+}
+.panel-top .sub {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+#control-root {
+  min-height: 0;
+}
+
+.diagnostics {
+  position: fixed;
+  z-index: 3;
+  right: 0;
+  bottom: 0;
+  left: var(--panel-w);
+  max-width: calc(100vw - var(--panel-w) - 8px);
+  font-size: 0.8rem;
+  line-height: 1.3;
+  color: var(--muted);
+  padding: 0.45rem 0.65rem;
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  border-top-left-radius: 6px;
+  background: rgba(17, 22, 29, 0.92);
+  pointer-events: none;
+}
+
+@media (max-width: 800px) {
+  :root {
+    --panel-w: 100%;
+  }
+  .panel {
+    top: auto;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    max-width: 100%;
+    max-height: 50vh;
+    min-width: 0;
+    width: 100%;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.45);
+  }
+  .diagnostics {
+    left: 0;
+    right: 0;
+    max-width: 100%;
+    border-left: none;
+    border-radius: 0;
+    bottom: min(50vh, 50dvh);
+    padding: 0.35rem 0.5rem;
+  }
+}
+
+.control-inner h3,
+.control-inner h4 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0.75rem 0 0.4rem;
+}
+.control-section {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.2rem 0;
+  min-height: 1.6rem;
+}
+.row-label {
+  flex: 0 0 44%;
+  font-size: 0.8rem;
+  color: var(--text);
+  line-height: 1.2;
+}
+.row > .row-label + * {
+  flex: 1;
+  min-width: 0;
+}
+.row-dual {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 0;
+}
+.row-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.control-select,
+.control-number {
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  background: #0d1117;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.2rem 0.35rem;
+}
+.control-range {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+.control-number {
+  max-width: 4.2rem;
+}
+.control-checkbox {
+  accent-color: var(--accent);
+  width: 1rem;
+  height: 1rem;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.3rem 0 0.5rem;
+}
+.btn {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.5rem;
+  color: var(--text);
+  background: #21262d;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.btn:hover {
+  background: #30363d;
+}
+
+.help {
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--muted);
+  margin: 0.75rem 0 0;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #0d1117;
+}
