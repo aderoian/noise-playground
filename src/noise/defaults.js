@@ -1,5 +1,75 @@
 import { makeNoise2D } from "open-simplex-noise";
 
+/**
+ * @typedef {object} RenderPresetLook
+ * @property {"gray" | "heat" | "terrain"} colorRamp
+ * @property {number} contrast
+ * @property {number} brightness
+ * @property {boolean} invert
+ * @property {readonly [number, number, number]} lightDir
+ * @property {number} lightAmbient
+ * @property {number} lightDiffuse
+ */
+
+/** @type {Record<string, RenderPresetLook>} */
+export const RENDER_PRESETS = {
+  natural: {
+    colorRamp: "gray",
+    contrast: 1.0,
+    brightness: 0.0,
+    invert: false,
+    lightDir: [0.45, 0.85, 0.4],
+    lightAmbient: 0.22,
+    lightDiffuse: 0.78
+  },
+  desert: {
+    colorRamp: "terrain",
+    contrast: 1.12,
+    brightness: 0.05,
+    invert: false,
+    lightDir: [0.52, 0.72, 0.32],
+    lightAmbient: 0.28,
+    lightDiffuse: 0.7
+  },
+  snow: {
+    colorRamp: "gray",
+    contrast: 1.05,
+    brightness: 0.12,
+    invert: false,
+    lightDir: [0.18, 0.38, 0.9],
+    lightAmbient: 0.34,
+    lightDiffuse: 0.64
+  },
+  volcanic: {
+    colorRamp: "heat",
+    contrast: 1.18,
+    brightness: 0.0,
+    invert: false,
+    lightDir: [0.35, 0.55, 0.76],
+    lightAmbient: 0.16,
+    lightDiffuse: 0.84
+  }
+};
+
+export const RENDER_PRESET_KEYS = Object.keys(RENDER_PRESETS);
+
+/**
+ * @param {string | undefined} key
+ * @returns {keyof typeof RENDER_PRESETS}
+ */
+export function normalizeRenderPresetKey(key) {
+  const k = String(key || "natural");
+  return k in RENDER_PRESETS ? k : "natural";
+}
+
+/**
+ * @param {string | undefined} key
+ * @returns {RenderPresetLook}
+ */
+export function getRenderPresetLook(key) {
+  return RENDER_PRESETS[normalizeRenderPresetKey(key)];
+}
+
 export function createDefaultState() {
   return {
     seed: 42,
@@ -25,13 +95,39 @@ export function createDefaultState() {
     contrast: 1.0,
     brightness: 0.0,
     invert: false,
-    colorRamp: "gray", // gray | heat | terrain
+    colorRamp: "gray", // gray | heat | terrain (subsumed by renderPreset for 3D view)
+    /** Color + mild lighting: natural | desert | snow | volcanic */
+    renderPreset: "natural",
+    /** >1 moves camera closer (zoom in); uses camera, not worldScale */
+    cameraZoom: 1.0,
+    /** PlaneGeometry subdivisions per side (8–512) */
+    meshSegments: 192,
     animate: false,
     timeSpeed: 0.25,
     /** Exaggeration of Z displacement in 3D mesh (noise already scaled by amplitude) */
     meshHeight: 0.35,
     /** Wireframe overlay on solid terrain */
-    meshWireframe: false
+    meshWireframe: false,
+    /** When true, height comes from the CPU-baked node graph (see noiseGraph) */
+    useGraph: true,
+    /** Baked field resolution for graph preview */
+    graphBakeW: 128,
+    graphBakeH: 128,
+    /**
+     * Incremented when the graph is edited; renderer rebakes when it changes
+     * @type {number}
+     */
+    graphRevision: 0,
+    /**
+     * Procedural graph asset (or null)
+     * @type {import("../graph/types.js").NoiseGraph | null}
+     */
+    noiseGraph: null,
+    /**
+     * Bumped when a graph is loaded from file (remounts the editor)
+     * @type {number}
+     */
+    graphKey: 0
   };
 }
 
@@ -40,18 +136,27 @@ const FRACTAL = { none: 0, fbm: 1, rigid: 2 };
 const VIEW = { "2d": 0, slice3d: 1 };
 const RAMP = { gray: 0, heat: 1, terrain: 2 };
 
+/** @type {Map<number, { x: number, y: number, z: number }>} */
+const _seedOffsetCache = new Map();
+
 /**
  * @param {number} seed
  */
 function seedToOffset(seed) {
   const s = Number(seed) | 0;
+  const hit = _seedOffsetCache.get(s);
+  if (hit) {
+    return hit;
+  }
   const a = makeNoise2D(s);
   const t = 10000.0;
-  return {
+  const o = {
     x: a(19.0, 23.0) * t,
     y: a(-11.0, 17.0) * t,
     z: a(3.0, 9.0) * t
   };
+  _seedOffsetCache.set(s, o);
+  return o;
 }
 
 /**
@@ -86,10 +191,23 @@ export function stateToUniforms(s, { width, height }, time, out) {
   u.uRigidWeight.value = s.rigidWeight;
   u.uViewMode.value = VIEW[s.viewMode] ?? 0;
   u.uSliceZ.value = s.sliceZ;
-  u.uInvert.value = s.invert ? 1 : 0;
-  u.uContrast.value = s.contrast;
-  u.uBrightness.value = s.brightness;
-  u.uRamp.value = RAMP[s.colorRamp] ?? 0;
+  const look = getRenderPresetLook(s.renderPreset);
+  u.uInvert.value = look.invert ? 1 : 0;
+  u.uContrast.value = look.contrast;
+  u.uBrightness.value = look.brightness;
+  u.uRamp.value = RAMP[look.colorRamp] ?? 0;
+  if (u.uLightDir && u.uLightDir.value && "set" in u.uLightDir.value) {
+    u.uLightDir.value.set(look.lightDir[0], look.lightDir[1], look.lightDir[2]);
+  }
+  if (u.uLightAmbient) {
+    u.uLightAmbient.value = look.lightAmbient;
+  }
+  if (u.uLightDiffuse) {
+    u.uLightDiffuse.value = look.lightDiffuse;
+  }
   u.uTime.value = s.animate ? time * s.timeSpeed : 0.0;
   u.uMeshHeight.value = s.meshHeight;
+  if (u.uUseGraph) {
+    u.uUseGraph.value = s.useGraph && s.noiseGraph ? 1 : 0;
+  }
 }

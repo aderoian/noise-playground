@@ -1,4 +1,4 @@
-import { createDefaultState } from "./defaults.js";
+import { createDefaultState, normalizeRenderPresetKey } from "./defaults.js";
 
 export function createNoiseState() {
   return createDefaultState();
@@ -46,6 +46,18 @@ export function validateAndNormalize(s) {
     3.0
   );
   s.meshWireframe = Boolean(s.meshWireframe);
+  s.useGraph = Boolean(s.useGraph);
+  s.graphKey = Math.max(0, Math.floor(Number(s.graphKey) || 0));
+  s.graphRevision = Math.max(0, Math.floor(Number(s.graphRevision) || 0));
+  s.graphBakeW = Math.max(8, Math.min(1024, Math.floor(s.graphBakeW) || 128));
+  s.graphBakeH = Math.max(8, Math.min(1024, Math.floor(s.graphBakeH) || 128));
+  s.renderPreset = normalizeRenderPresetKey(/** @type {string} */ (s.renderPreset));
+  s.cameraZoom = clamp01(
+    Number.isFinite(s.cameraZoom) ? Number(s.cameraZoom) : 1.0,
+    0.25,
+    4.0
+  );
+  s.meshSegments = Math.max(8, Math.min(512, Math.floor(s.meshSegments) || 192));
   s.orientation = s.orientation ? 1 : 0;
   s.cellMetric = (s.cellMetric | 0) % 3;
   s.cellReturn = (s.cellReturn | 0) % 3;

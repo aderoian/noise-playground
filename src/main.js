@@ -1,39 +1,128 @@
-import { createDefaultState } from "./noise/defaults.js";
+import { createDefaultState, normalizeRenderPresetKey } from "./noise/defaults.js";
+import { createDefaultGraph } from "./graph/defaultGraph.js";
 import { createNoiseView } from "./render/NoiseView.js";
 import { validateAndNormalize } from "./noise/state.js";
-import { buildControls } from "./ui/buildControls.js";
+import { mountGraphApp } from "./graph/mount.jsx";
+import { initLayoutControls } from "./ui/layoutControl.js";
 
-/** Arrow-key pan step in world offset units (same space as the Offset sliders) */
+/** Arrow-key pan step in world offset units (same space as graph / legacy offset) */
 const OFFSET_NUDGE = 0.2;
 
 const viewCanvas = document.getElementById("view");
-const controlRoot = document.getElementById("control-root");
+const graphRoot = document.getElementById("graph-root");
 const diag = document.getElementById("diagnostics");
-if (!viewCanvas || !controlRoot || !diag) {
-  throw new Error("Missing #view, #control-root, or #diagnostics");
+const diagContent = document.getElementById("diagnostics-content");
+const renderWorld = document.getElementById("render-world");
+const renderWorldNum = document.getElementById("render-world-num");
+const renderZoom = document.getElementById("render-zoom");
+const renderZoomNum = document.getElementById("render-zoom-num");
+const renderMesh = document.getElementById("render-mesh");
+const renderMeshNum = document.getElementById("render-mesh-num");
+const renderMeshVerts = document.getElementById("render-mesh-verts");
+const renderPreset = document.getElementById("render-preset");
+if (!viewCanvas || !diag || !graphRoot || !diagContent) {
+  throw new Error("Missing #view, #graph-root, #diagnostics, or #diagnostics-content");
+}
+if (
+  !renderWorld ||
+  !renderWorldNum ||
+  !renderZoom ||
+  !renderZoomNum ||
+  !renderMesh ||
+  !renderMeshNum ||
+  !renderMeshVerts ||
+  !renderPreset
+) {
+  throw new Error("Missing render panel controls in DOM");
 }
 
-let state = createDefaultState();
-
-const ui = buildControls(
-  controlRoot,
-  {
-    getState: () => state,
-    setState: (next) => {
-      state = { ...next };
-      ui.syncAll();
-      schedule();
-    },
-    onReset: () => {
-      state = createDefaultState();
-      ui.syncAll();
-      schedule();
-    }
-  },
-  null
-);
+let state = { ...createDefaultState(), noiseGraph: createDefaultGraph() };
+const graphApp = mountGraphApp(graphRoot, () => state, {
+  applyPatch: (p) => {
+    state = { ...state, ...p };
+    graphApp.render();
+    schedule();
+  }
+});
 
 const noise = createNoiseView(/** @type {HTMLCanvasElement} */ (viewCanvas), () => state);
+
+/**
+ * @param {object} p
+ */
+function applyRenderPatch(p) {
+  state = { ...state, ...p };
+  validateAndNormalize(state);
+  syncRenderPanelFromState();
+  schedule();
+}
+
+/**
+ * @param {HTMLInputElement} rangeEl
+ * @param {HTMLInputElement} numEl
+ * @param {number} v
+ */
+function setPairFloat(rangeEl, numEl, v) {
+  const s = String(v);
+  rangeEl.value = s;
+  numEl.value = s;
+}
+
+function syncRenderPanelFromState() {
+  setPairFloat(/** @type {HTMLInputElement} */ (renderWorld), /** @type {HTMLInputElement} */ (renderWorldNum), state.worldScale);
+  setPairFloat(/** @type {HTMLInputElement} */ (renderZoom), /** @type {HTMLInputElement} */ (renderZoomNum), state.cameraZoom);
+  setPairFloat(/** @type {HTMLInputElement} */ (renderMesh), /** @type {HTMLInputElement} */ (renderMeshNum), state.meshSegments);
+  /** @type {HTMLSelectElement} */ (renderPreset).value = normalizeRenderPresetKey(state.renderPreset);
+}
+
+/**
+ * @param {HTMLInputElement} rangeEl
+ * @param {HTMLInputElement} numEl
+ * @param {(n: number) => object} buildPatch
+ */
+function bindRangeNumberPair(rangeEl, numEl, buildPatch) {
+  function onRange() {
+    const n = parseFloat(rangeEl.value);
+    if (!Number.isFinite(n)) {
+      return;
+    }
+    numEl.value = String(n);
+    applyRenderPatch(buildPatch(n));
+  }
+  function onNum() {
+    const n = parseFloat(numEl.value);
+    if (!Number.isFinite(n)) {
+      return;
+    }
+    rangeEl.value = String(n);
+    applyRenderPatch(buildPatch(n));
+  }
+  rangeEl.addEventListener("input", onRange);
+  numEl.addEventListener("input", onNum);
+  numEl.addEventListener("change", onNum);
+}
+
+bindRangeNumberPair(
+  /** @type {HTMLInputElement} */ (renderWorld),
+  /** @type {HTMLInputElement} */ (renderWorldNum),
+  (n) => ({ worldScale: n })
+);
+bindRangeNumberPair(
+  /** @type {HTMLInputElement} */ (renderZoom),
+  /** @type {HTMLInputElement} */ (renderZoomNum),
+  (n) => ({ cameraZoom: n })
+);
+bindRangeNumberPair(
+  /** @type {HTMLInputElement} */ (renderMesh),
+  /** @type {HTMLInputElement} */ (renderMeshNum),
+  (n) => ({ meshSegments: Math.floor(n) })
+);
+/** @type {HTMLSelectElement} */ (renderPreset).addEventListener("change", (e) => {
+  const v = /** @type {HTMLSelectElement} */ (e.target).value;
+  applyRenderPatch({ renderPreset: v });
+});
+
+syncRenderPanelFromState();
 
 function nudgeOffsetFromKeys(dx, dy) {
   state = {
@@ -41,7 +130,6 @@ function nudgeOffsetFromKeys(dx, dy) {
     offset: { ...state.offset, x: state.offset.x + dx, y: state.offset.y + dy }
   };
   validateAndNormalize(state);
-  ui.syncAll();
   schedule();
 }
 
@@ -110,9 +198,18 @@ function runFrame() {
     const seg = noise.viewInfo.segments;
     const verts = (seg + 1) * (seg + 1);
     const tris = seg * seg * 2;
-    diag.textContent =
+    const bakeDebug =
+      typeof window !== "undefined" && window.localStorage?.getItem("noise-bake-debug") === "1";
+    const b = bakeDebug && typeof noise.getLastBakeStats === "function" ? noise.getLastBakeStats() : null;
+    const bakeLine =
+      b && typeof b.compileMs === "number"
+        ? `  |  Bake: compile ${b.compileMs.toFixed(1)} + sample ${b.sampleMs.toFixed(1)} + upload ${b.uploadMs.toFixed(1)} ms`
+        : "";
+    diagContent.textContent =
       `Frame: ${ms.toFixed(2)} ms  |  View: ${w}\u00d7${h}  |  ` +
-      `Mesh ${seg}\u00d7${seg}  |  ~${verts.toLocaleString()} verts  |  ${tris.toLocaleString()} tris`;
+      `Mesh ${seg}\u00d7${seg}  |  ~${verts.toLocaleString()} verts  |  ${tris.toLocaleString()} tris` +
+      bakeLine;
+    renderMeshVerts.textContent = `Vertices: ${verts.toLocaleString()} (grid ${seg}×${seg})`;
     if (state.animate) {
       runFrame();
     }
@@ -123,7 +220,11 @@ function schedule() {
   runFrame();
 }
 
-ui.syncAll();
+initLayoutControls(() => {
+  schedule();
+});
+
+graphApp.render();
 schedule();
 
 window.addEventListener("resize", () => {

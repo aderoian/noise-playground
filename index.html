@@ -8,24 +8,137 @@
   </head>
   <body>
     <div id="app">
+      <div
+        class="graph-panel"
+        id="graph-column"
+        aria-label="Noise graph editor"
+      >
+        <div class="graph-panel__chrome">
+          <div class="graph-panel__head">
+            <h1>Noise Playground</h1>
+            <p class="sub">
+              Node graph: OpenSimplex, fractal, Worley &mdash; live height preview
+            </p>
+          </div>
+        </div>
+        <div id="graph-root" class="graph-panel__body"></div>
+      </div>
+      <div
+        class="splitter splitter--vertical"
+        id="split-graph-view"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Drag to resize graph and preview columns"
+        title="Drag to resize graph and preview"
+        tabindex="0"
+      ></div>
       <div class="viewport-wrap viewport-fullscreen" id="viewport-wrap">
         <canvas
           id="view"
           tabindex="0"
           aria-label="Noise preview. Arrow keys pan the field offset. Click to focus."
         ></canvas>
+        <aside
+          class="render-panel"
+          id="render-panel"
+          aria-label="Render and preview options"
+        >
+          <h2 class="render-panel__title">Render</h2>
+          <label class="render-panel__row">
+            <span class="render-panel__label">World size</span>
+            <div class="render-panel__dual">
+              <input
+                id="render-world"
+                class="control-range"
+                type="range"
+                min="0.1"
+                max="20"
+                step="0.1"
+                value="1"
+              />
+              <input
+                id="render-world-num"
+                class="control-number"
+                type="number"
+                min="0.1"
+                max="20"
+                step="0.1"
+                value="1"
+              />
+            </div>
+          </label>
+          <label class="render-panel__row">
+            <span class="render-panel__label">Zoom</span>
+            <div class="render-panel__dual">
+              <input
+                id="render-zoom"
+                class="control-range"
+                type="range"
+                min="0.25"
+                max="4"
+                step="0.01"
+                value="1"
+              />
+              <input
+                id="render-zoom-num"
+                class="control-number"
+                type="number"
+                min="0.25"
+                max="4"
+                step="0.01"
+                value="1"
+              />
+            </div>
+          </label>
+          <label class="render-panel__row">
+            <span class="render-panel__label">Mesh res.</span>
+            <div class="render-panel__dual">
+              <input
+                id="render-mesh"
+                class="control-range"
+                type="range"
+                min="8"
+                max="512"
+                step="1"
+                value="192"
+              />
+              <input
+                id="render-mesh-num"
+                class="control-number"
+                type="number"
+                min="8"
+                max="512"
+                step="1"
+                value="192"
+              />
+            </div>
+          </label>
+          <span class="render-panel__hint" id="render-mesh-verts" aria-live="polite"
+            >Vertices: —</span
+          >
+          <label class="render-panel__row">
+            <span class="render-panel__label">Look</span>
+            <select id="render-preset" class="control-select" aria-label="Texture and lighting preset">
+              <option value="natural">Natural</option>
+              <option value="desert">Desert</option>
+              <option value="snow">Snow</option>
+              <option value="volcanic">Volcanic</option>
+            </select>
+          </label>
+        </aside>
       </div>
-      <aside class="panel" aria-label="Parameters">
-        <div class="panel-top">
-          <h1>Noise Playground</h1>
-          <p class="sub">
-            OpenSimplex2 (K.jpg GLSL) + fractal, rigid, cellular &mdash; live
-            preview
-          </p>
-        </div>
-        <div id="control-root"></div>
-      </aside>
-      <div id="diagnostics" class="diagnostics" role="status"></div>
+      <div
+        class="splitter splitter--horizontal"
+        id="split-diag"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Drag to resize the status bar height"
+        title="Drag to resize status area"
+        tabindex="0"
+      ></div>
+      <div id="diagnostics" class="diagnostics" role="status">
+        <div class="diagnostics__content" id="diagnostics-content"></div>
+      </div>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

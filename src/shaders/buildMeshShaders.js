@@ -14,6 +14,8 @@ ${os2}
 ${os2s}
 ${cellular}
 ${noiseValue}
+uniform int uUseGraph;
+uniform sampler2D uGraphTex;
 uniform mat4 modelMatrix;
 uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
@@ -28,7 +30,13 @@ void main() {
   vUv = uv;
   vec2 w2 = (uv - 0.5) * 2.0 * vec2(uWorldScale * uAspect, uWorldScale);
   vec3 pN = noiseSampleP(uv);
-  float raw = fractalValue(pN) * uAmplitude;
+  float raw;
+  if (uUseGraph == 1) {
+    float g = texture(uGraphTex, uv).r;
+    raw = g * uAmplitude;
+  } else {
+    raw = fractalValue(pN) * uAmplitude;
+  }
   float zd = raw * uMeshHeight;
   vec3 pos = vec3(w2.x, w2.y, zd) + position * 0.0;
   vec4 wp = modelMatrix * vec4(pos, 1.0);
@@ -41,6 +49,9 @@ void main() {
 
 export function buildMeshFragmentShader() {
   return `precision highp float;
+uniform vec3 uLightDir;
+uniform float uLightAmbient;
+uniform float uLightDiffuse;
 ${noiseColor}
 in vec2 vUv;
 in vec3 vWorldPos;
@@ -55,8 +66,8 @@ void main() {
   if (!gl_FrontFacing) {
     n = -n;
   }
-  vec3 L = normalize(vec3(0.45, 0.85, 0.4));
-  float diff = 0.22 + 0.78 * max(dot(n, L), 0.0);
+  vec3 L = normalize(uLightDir);
+  float diff = uLightAmbient + uLightDiffuse * max(dot(n, L), 0.0);
   vec3 col = albedo * diff;
   fragColor = vec4(col, 1.0);
 }
