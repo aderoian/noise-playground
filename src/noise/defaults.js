@@ -127,7 +127,37 @@ export function createDefaultState() {
      * Bumped when a graph is loaded from file (remounts the editor)
      * @type {number}
      */
-    graphKey: 0
+    graphKey: 0,
+    // --- Chunked terrain + view modes (renderer overhaul) ---
+    /** "simple" = editor pan preview; "complex" = free-fly */
+    rendererViewMode: "simple",
+    /** Integer: load chunks in [cx - r, cx + r] in both axes (Chebyshev / square rings) */
+    chunkRadius: 2,
+    /** Highest detail mesh resolution (segments per chunk edge) */
+    defaultChunkResolution: 192,
+    /** World extent of one chunk along X and Y (same units as noise plane w2) */
+    chunkWorldSize: 0.4,
+    /** When LOD enabled, this is the floor for mesh segments */
+    minLodResolution: 8,
+    lodEnabled: true,
+    maxChunkRebuildsPerFrame: 3,
+    /** Added to final terrain Z in world (after * meshHeight) */
+    heightOffset: 0.0,
+    // Fly camera (Z-up, horizontal X/Y). Used when rendererViewMode === "complex"
+    flyCamera: {
+      x: 0,
+      y: 0,
+      z: 1.2,
+      yaw: 0,
+      pitch: -0.35
+    },
+    // Debug
+    debugShowChunkBorders: false,
+    debugShowChunkCoords: false,
+    debugColorByLod: false,
+    debugShowRendererStats: true,
+    /** Bumped to force all chunk meshes to rebuild (reset view, etc.) */
+    chunkReloadSeq: 0
   };
 }
 
@@ -142,7 +172,11 @@ const _seedOffsetCache = new Map();
 /**
  * @param {number} seed
  */
-function seedToOffset(seed) {
+/**
+ * @param {number} seed
+ * @returns {{ x: number, y: number, z: number }}
+ */
+export function seedToOffset(seed) {
   const s = Number(seed) | 0;
   const hit = _seedOffsetCache.get(s);
   if (hit) {

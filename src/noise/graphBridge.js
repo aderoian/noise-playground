@@ -38,6 +38,27 @@ export function buildEvalContextForUv(u, v, st, viewW, viewH, tSec) {
 }
 
 /**
+ * World-space X/Y in the same units as the 3D terrain plane (Z-up, horizontal axes X and Y)
+ * and the same noise domain as a vertex at `w2` in the legacy single-patch view.
+ * @param {number} worldX
+ * @param {number} worldY
+ * @param {object} st
+ * @param {number} tSec
+ * @returns {import("../graph/types.js").EvalContext}
+ */
+export function buildEvalContextForWorldXY(worldX, worldY, st, tSec) {
+  const zc = st.viewMode === "slice3d" ? st.sliceZ : 0.0;
+  const uT = st.animate ? tSec * st.timeSpeed : 0.0;
+  return {
+    x: worldX + st.offset.x,
+    y: worldY + st.offset.y,
+    z: zc + uT + st.offset.z,
+    time: uT,
+    seed: st.seed
+  };
+}
+
+/**
  * Bakes scalar noise (same domain as the mesh) into a 2D float array (row-major, +U along X, +V along Y)
  * @param {import("../graph/types.js").NoiseGraph} graph
  * @param {object} st

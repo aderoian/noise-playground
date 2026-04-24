@@ -36,7 +36,7 @@
         <canvas
           id="view"
           tabindex="0"
-          aria-label="Noise preview. Arrow keys pan the field offset. Click to focus."
+          aria-label="Noise preview. Click to focus. Simple: WASD / arrows pan, wheel zoom. Complex: WASD move, mouselook, shift sprint, wheel dolly."
         ></canvas>
         <aside
           class="render-panel"
@@ -44,6 +44,25 @@
           aria-label="Render and preview options"
         >
           <h2 class="render-panel__title">Render</h2>
+          <label class="render-panel__row">
+            <span class="render-panel__label">View</span>
+            <select
+              id="render-view-mode"
+              class="control-select"
+              aria-label="View mode: simple (pan origin) or complex (fly)"
+            >
+              <option value="simple">Simple</option>
+              <option value="complex">Complex</option>
+            </select>
+          </label>
+          <div class="render-panel__row">
+            <button type="button" id="render-reset" class="control-button">
+              Reset view &amp; terrain
+            </button>
+          </div>
+          <p class="render-panel__hint" data-render-for="complex" id="render-mode-hint" hidden>
+            Click canvas to look. Escape stops pointer lock.
+          </p>
           <label class="render-panel__row">
             <span class="render-panel__label">World size</span>
             <div class="render-panel__dual">
@@ -67,7 +86,7 @@
               />
             </div>
           </label>
-          <label class="render-panel__row">
+          <label class="render-panel__row" data-render-for="simple">
             <span class="render-panel__label">Zoom</span>
             <div class="render-panel__dual">
               <input
@@ -90,8 +109,32 @@
               />
             </div>
           </label>
+          <h3 class="render-panel__subtitle">Chunked terrain</h3>
           <label class="render-panel__row">
-            <span class="render-panel__label">Mesh res.</span>
+            <span class="render-panel__label">Chunk radius</span>
+            <div class="render-panel__dual">
+              <input
+                id="render-chunk-r"
+                class="control-range"
+                type="range"
+                min="0"
+                max="12"
+                step="1"
+                value="2"
+              />
+              <input
+                id="render-chunk-r-num"
+                class="control-number"
+                type="number"
+                min="0"
+                max="12"
+                step="1"
+                value="2"
+              />
+            </div>
+          </label>
+          <label class="render-panel__row">
+            <span class="render-panel__label">Chunk res</span>
             <div class="render-panel__dual">
               <input
                 id="render-mesh"
@@ -113,8 +156,165 @@
               />
             </div>
           </label>
+          <label class="render-panel__row">
+            <span class="render-panel__label">Chunk size</span>
+            <div class="render-panel__dual">
+              <input
+                id="render-chunk-w"
+                class="control-range"
+                type="range"
+                min="0.05"
+                max="4"
+                step="0.05"
+                value="0.4"
+              />
+              <input
+                id="render-chunk-w-num"
+                class="control-number"
+                type="number"
+                min="0.05"
+                max="4"
+                step="0.05"
+                value="0.4"
+              />
+            </div>
+          </label>
+          <label class="render-panel__row">
+            <span class="render-panel__label">Noise scale</span>
+            <div class="render-panel__dual">
+              <input
+                id="render-freq"
+                class="control-range"
+                type="range"
+                min="0.01"
+                max="20"
+                step="0.01"
+                value="1"
+              />
+              <input
+                id="render-freq-num"
+                class="control-number"
+                type="number"
+                min="0.01"
+                max="20"
+                step="0.01"
+                value="1"
+              />
+            </div>
+          </label>
+          <label class="render-panel__row">
+            <span class="render-panel__label">Height</span>
+            <div class="render-panel__dual">
+              <input
+                id="render-meshh"
+                class="control-range"
+                type="range"
+                min="0.02"
+                max="3"
+                step="0.01"
+                value="0.35"
+              />
+              <input
+                id="render-meshh-num"
+                class="control-number"
+                type="number"
+                min="0.02"
+                max="3"
+                step="0.01"
+                value="0.35"
+              />
+            </div>
+          </label>
+          <label class="render-panel__row">
+            <span class="render-panel__label">Z offset</span>
+            <div class="render-panel__dual">
+              <input
+                id="render-hoff"
+                class="control-range"
+                type="range"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="0"
+              />
+              <input
+                id="render-hoff-num"
+                class="control-number"
+                type="number"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="0"
+              />
+            </div>
+          </label>
+          <label class="render-panel__row">
+            <span class="render-panel__label">LOD</span>
+            <input
+              type="checkbox"
+              id="render-lod"
+              class="control-checkbox"
+              checked
+            />
+            <span class="render-panel__label-sub">on</span>
+          </label>
+          <label class="render-panel__row">
+            <span class="render-panel__label">Min LOD res</span>
+            <div class="render-panel__dual">
+              <input
+                id="render-lodmin"
+                class="control-range"
+                type="range"
+                min="2"
+                max="128"
+                step="1"
+                value="8"
+              />
+              <input
+                id="render-lodmin-num"
+                class="control-number"
+                type="number"
+                min="2"
+                max="128"
+                step="1"
+                value="8"
+              />
+            </div>
+          </label>
+          <label class="render-panel__row">
+            <span class="render-panel__label">Rebuilds / frame</span>
+            <div class="render-panel__dual">
+              <input
+                id="render-rebuild"
+                class="control-range"
+                type="range"
+                min="1"
+                max="32"
+                step="1"
+                value="3"
+              />
+              <input
+                id="render-rebuild-num"
+                class="control-number"
+                type="number"
+                min="1"
+                max="32"
+                step="1"
+                value="3"
+              />
+            </div>
+          </label>
+          <h3 class="render-panel__subtitle">Debug</h3>
+          <label class="render-panel__row render-panel__row--inline">
+            <input type="checkbox" id="debug-borders" />
+            <span>Chunk edges</span>
+          </label>
+          <label class="render-panel__row render-panel__row--inline">
+            <input type="checkbox" id="debug-lod" />
+            <span>Color LOD</span>
+          </label>
           <span class="render-panel__hint" id="render-mesh-verts" aria-live="polite"
-            >Vertices: —</span
+            >—</span
           >
           <label class="render-panel__row">
             <span class="render-panel__label">Look</span>

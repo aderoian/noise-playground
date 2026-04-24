@@ -1,30 +1,7 @@
 import { createRoot } from "react-dom/client";
 import React from "react";
 import { GraphEditor } from "../ui/graph/GraphEditor.jsx";
-
-/**
- * @param {import("./types.js").NoiseGraph} g
- * @returns {string}
- */
-function graphEvalSignature(g) {
-  return JSON.stringify({
-    id: g.id,
-    version: g.version,
-    outputNodeId: g.outputNodeId,
-    nodes: g.nodes.map((n) => ({
-      id: n.id,
-      typeId: n.typeId,
-      params: n.params,
-      pinDefaults: n.pinDefaults,
-      isUnknown: n.isUnknown
-    })),
-    links: g.links.map((l) => ({
-      id: l.id,
-      from: l.from,
-      to: l.to
-    }))
-  });
-}
+import { graphEvalSignature } from "./evalSignature.js";
 
 /**
  * Bumps `graphRevision` when the *eval* payload changes (not node positions / layout).

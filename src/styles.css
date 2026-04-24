@@ -172,11 +172,40 @@ body.layout-dragging--h * {
   letter-spacing: 0.05em;
   color: var(--muted);
 }
+.render-panel__subtitle {
+  margin: 0.5rem 0 0.15rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
 .render-panel__row {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
   margin: 0.35rem 0 0;
+}
+.render-panel__row--inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+.render-panel__row--inline span {
+  font-size: 0.75rem;
+  color: var(--text);
+}
+.render-panel__label-sub {
+  color: var(--muted);
+  font-size: 0.7rem;
+  margin-left: 0.15rem;
+}
+.control-checkbox {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  accent-color: var(--accent);
 }
 .render-panel__label {
   color: var(--text);
@@ -213,6 +242,26 @@ body.layout-dragging--h * {
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.22rem 0.35rem;
+}
+.render-panel .control-button {
+  width: 100%;
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--text);
+  background: #0d1117;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+  text-align: center;
+}
+.render-panel .control-button:hover {
+  background: #151a22;
+  border-color: var(--accent);
+}
+.render-panel .control-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .render-panel__hint {
   display: block;
