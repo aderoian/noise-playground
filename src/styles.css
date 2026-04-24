@@ -306,6 +306,10 @@ body.app-graph-minimized #split-graph-view {
   color: var(--muted);
   letter-spacing: 0.04em;
 }
+/* Ensure mode-scoped rows respect [hidden]; author display:flex can otherwise stay visible */
+.render-panel [data-render-for][hidden] {
+  display: none !important;
+}
 .render-panel__row {
   display: flex;
   flex-direction: column;

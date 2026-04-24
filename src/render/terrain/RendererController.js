@@ -27,7 +27,7 @@ import {
   applyCameraFromViewMode,
   getViewCenterWorldXY
 } from "./ViewController.js";
-import { terrainSettingsSignature } from "./terrainStateSignature.js";
+import { terrainMeshBakeSignature } from "./terrainStateSignature.js";
 
 /** Golden-ratio hues for arbitrary LOD level debug tint (shared refs, do not mutate). */
 const LOD_DBG_PALETTE = Array.from({ length: 32 }, (_, i) => {
@@ -148,7 +148,8 @@ export function createRendererController(canvas, getState, getGraph) {
    */
   const chunkMap = new Map();
 
-  let lastTerrainSig = "";
+  let lastMeshBakeSig = "";
+  let lastOffsetScrollSig = "";
   const viewInfo = {
     segments: 0,
     triangleCount: 0,
@@ -212,26 +213,44 @@ export function createRendererController(canvas, getState, getGraph) {
   }
 
   function syncRing(st) {
-    const c = getCenterChunkCoord(st);
-    const { fxc, fyc } = getViewCenterChunkFloat(st);
-    const r = st.chunkRadius | 0;
+    /** @type {Set<string>} */
     const want = new Set();
-    if (r <= 0) {
-      want.add(`${c.cx},${c.cy}`);
-    } else {
-      const r2 = r * r;
-      const i0 = Math.floor(fxc - r) - 1;
-      const i1 = Math.ceil(fxc + r) + 1;
-      const j0 = Math.floor(fyc - r) - 1;
-      const j1 = Math.ceil(fyc + r) + 1;
-      for (let j = j0; j <= j1; j++) {
-        for (let i = i0; i <= i1; i++) {
-          const dxc = (i + 0.5) - fxc;
-          const dyc = (j + 0.5) - fyc;
-          if (dxc * dxc + dyc * dyc > r2) {
-            continue;
-          }
+    let fxc = 0;
+    let fyc = 0;
+    if (st.rendererViewMode === "chunk") {
+      const n = st.chunkViewSize | 0;
+      const side = n === 1 || n === 3 || n === 5 ? n : 3;
+      const half = (side - 1) >> 1;
+      fxc = 0;
+      fyc = 0;
+      for (let j = -half; j <= half; j++) {
+        for (let i = -half; i <= half; i++) {
           want.add(`${i},${j}`);
+        }
+      }
+    } else {
+      const c = getCenterChunkCoord(st);
+      const fc = getViewCenterChunkFloat(st);
+      fxc = fc.fxc;
+      fyc = fc.fyc;
+      const r = st.chunkRadius | 0;
+      if (r <= 0) {
+        want.add(`${c.cx},${c.cy}`);
+      } else {
+        const r2 = r * r;
+        const i0 = Math.floor(fxc - r) - 1;
+        const i1 = Math.ceil(fxc + r) + 1;
+        const j0 = Math.floor(fyc - r) - 1;
+        const j1 = Math.ceil(fyc + r) + 1;
+        for (let j = j0; j <= j1; j++) {
+          for (let i = i0; i <= i1; i++) {
+            const dxc = i + 0.5 - fxc;
+            const dyc = j + 0.5 - fyc;
+            if (dxc * dxc + dyc * dyc > r2) {
+              continue;
+            }
+            want.add(`${i},${j}`);
+          }
         }
       }
     }
@@ -286,6 +305,20 @@ export function createRendererController(canvas, getState, getGraph) {
   }
 
   function updateLodOnChunks(st) {
+    if (st.rendererViewMode === "chunk") {
+      const segsN = resolveMeshSegmentsForRing(st, 0);
+      for (const ch of chunkMap.values()) {
+        ch.debugRgb = lodColorForLevel(0);
+        if (0 !== ch.dist) {
+          ch.dist = 0;
+        }
+        if (segsN !== ch.segments) {
+          ch.segments = segsN;
+          ch.dirty = true;
+        }
+      }
+      return;
+    }
     const { fxc, fyc } = getViewCenterChunkFloat(st);
     for (const ch of chunkMap.values()) {
       const dE = Math.hypot(ch.cx + 0.5 - fxc, ch.cy + 0.5 - fyc);
@@ -329,9 +362,16 @@ export function createRendererController(canvas, getState, getGraph) {
     const w = canvas.width || 1;
     const h = canvas.height || 1;
 
-    const sig = terrainSettingsSignature(st0, graph);
-    if (sig !== lastTerrainSig) {
-      lastTerrainSig = sig;
+    const meshBake = terrainMeshBakeSignature(st0, graph);
+    const scroll = `${st0.offset.x},${st0.offset.y},${st0.offset.z}`;
+    if (meshBake !== lastMeshBakeSig) {
+      lastMeshBakeSig = meshBake;
+      for (const ch of chunkMap.values()) {
+        ch.dirty = true;
+      }
+    }
+    if (scroll !== lastOffsetScrollSig) {
+      lastOffsetScrollSig = scroll;
       for (const ch of chunkMap.values()) {
         ch.dirty = true;
       }
@@ -344,7 +384,11 @@ export function createRendererController(canvas, getState, getGraph) {
     syncRing(st0);
     updateLodOnChunks(st0);
 
-    const maxR = st0.maxChunkRebuildsPerFrame | 0;
+    let maxR = st0.maxChunkRebuildsPerFrame | 0;
+    const nChunks = chunkMap.size | 0;
+    if (st0.rendererViewMode === "chunk" && nChunks > 0 && nChunks <= 25) {
+      maxR = Math.min(32, Math.max(maxR, nChunks));
+    }
     let rebuilt = 0;
     for (const [k, ch] of chunkMap) {
       if (!ch.dirty) {
@@ -376,7 +420,8 @@ export function createRendererController(canvas, getState, getGraph) {
     }
     viewInfo.triangleCount = tri;
     viewInfo.activeChunkCount = chunkMap.size;
-    viewInfo.centerChunk = `${c0.cx},${c0.cy}`;
+    viewInfo.centerChunk =
+      st0.rendererViewMode === "chunk" ? "0,0" : `${c0.cx},${c0.cy}`;
     const vc = getViewCenterWorldXY(st0);
     viewInfo.viewMode = st0.rendererViewMode;
     viewInfo.flyPos = st0.flyCamera

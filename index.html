@@ -74,7 +74,7 @@
         <canvas
           id="view"
           tabindex="0"
-          aria-label="Noise preview. Click to focus. Simple: WASD / arrows pan, wheel zoom. Complex: WASD move, mouselook, shift sprint, wheel dolly."
+          aria-label="Noise preview. Click to focus. Chunk: WASD / arrows adjust offset, wheel zoom. World: WASD move, mouselook, shift sprint, wheel dolly."
         ></canvas>
         <aside
           class="render-panel"
@@ -110,10 +110,10 @@
             <select
               id="render-view-mode"
               class="control-select"
-              aria-label="View mode: simple (pan origin) or complex (fly)"
+              aria-label="View mode: chunk snapshot or world streaming"
             >
-              <option value="simple">Simple</option>
-              <option value="complex">Complex</option>
+              <option value="chunk">Chunk</option>
+              <option value="world">World</option>
             </select>
           </label>
           <div class="render-panel__row">
@@ -121,33 +121,18 @@
               Reset view &amp; terrain
             </button>
           </div>
-          <p class="render-panel__hint" data-render-for="complex" id="render-mode-hint" hidden>
+          <p class="render-panel__hint" data-render-for="world" id="render-mode-hint" hidden>
             Click canvas to look. Escape stops pointer lock.
           </p>
-          <label class="render-panel__row">
-            <span class="render-panel__label">World size</span>
-            <div class="render-panel__dual">
-              <input
-                id="render-world"
-                class="control-range"
-                type="range"
-                min="0.1"
-                max="20"
-                step="0.1"
-                value="1"
-              />
-              <input
-                id="render-world-num"
-                class="control-number"
-                type="number"
-                min="0.1"
-                max="20"
-                step="0.1"
-                value="1"
-              />
-            </div>
+          <label class="render-panel__row" data-render-for="chunk">
+            <span class="render-panel__label">Chunk view</span>
+            <select id="render-chunk-view" class="control-select" aria-label="Chunk grid size: 1x1, 3x3, or 5x5">
+              <option value="1">1×1</option>
+              <option value="3">3×3</option>
+              <option value="5">5×5</option>
+            </select>
           </label>
-          <label class="render-panel__row" data-render-for="simple">
+          <label class="render-panel__row" data-render-for="chunk">
             <span class="render-panel__label">Zoom</span>
             <div class="render-panel__dual">
               <input
@@ -170,8 +155,54 @@
               />
             </div>
           </label>
+          <label class="render-panel__row" data-render-for="chunk">
+            <span class="render-panel__label">Offset X</span>
+            <div class="render-panel__dual">
+              <input
+                id="render-offset-x"
+                class="control-range"
+                type="range"
+                min="-500"
+                max="500"
+                step="0.5"
+                value="0"
+              />
+              <input
+                id="render-offset-x-num"
+                class="control-number"
+                type="number"
+                min="-1000000"
+                max="1000000"
+                step="0.1"
+                value="0"
+              />
+            </div>
+          </label>
+          <label class="render-panel__row" data-render-for="chunk">
+            <span class="render-panel__label">Offset Y</span>
+            <div class="render-panel__dual">
+              <input
+                id="render-offset-y"
+                class="control-range"
+                type="range"
+                min="-500"
+                max="500"
+                step="0.5"
+                value="0"
+              />
+              <input
+                id="render-offset-y-num"
+                class="control-number"
+                type="number"
+                min="-1000000"
+                max="1000000"
+                step="0.1"
+                value="0"
+              />
+            </div>
+          </label>
           <h3 class="render-panel__subtitle">Chunked terrain</h3>
-          <label class="render-panel__row">
+          <label class="render-panel__row" data-render-for="world" hidden>
             <span class="render-panel__label">Chunk radius</span>
             <div class="render-panel__dual">
               <input
@@ -240,7 +271,7 @@
               />
             </div>
           </label>
-          <label class="render-panel__row">
+          <label class="render-panel__row" data-render-for="world" hidden>
             <span class="render-panel__label">LOD</span>
             <input
               type="checkbox"
@@ -252,6 +283,8 @@
           </label>
           <label
             class="render-panel__row"
+            data-render-for="world"
+            hidden
             title="Distance bands from view center to chunk radius; more layers = finer steps; outer bands are wider (progressive)"
           >
             <span class="render-panel__label">LOD layers</span>
@@ -277,7 +310,7 @@
               />
             </div>
           </label>
-          <label class="render-panel__row">
+          <label class="render-panel__row" data-render-for="world" hidden>
             <span class="render-panel__label">Min LOD res</span>
             <div class="render-panel__dual">
               <input
@@ -328,7 +361,7 @@
             <input type="checkbox" id="debug-borders" />
             <span>Chunk edges</span>
           </label>
-          <label class="render-panel__row render-panel__row--inline">
+          <label class="render-panel__row render-panel__row--inline" data-render-for="world" hidden>
             <input type="checkbox" id="debug-lod" />
             <span>Color LOD</span>
           </label>

@@ -15,8 +15,11 @@ if (!viewCanvas || !graphRoot || !diagContent) {
 const el = (id) => document.getElementById(id);
 const renderReset = el("render-reset");
 const renderViewMode = el("render-view-mode");
-const renderWorld = el("render-world");
-const renderWorldNum = el("render-world-num");
+const renderChunkView = el("render-chunk-view");
+const renderOffsetX = el("render-offset-x");
+const renderOffsetXNum = el("render-offset-x-num");
+const renderOffsetY = el("render-offset-y");
+const renderOffsetYNum = el("render-offset-y-num");
 const renderZoom = el("render-zoom");
 const renderZoomNum = el("render-zoom-num");
 const renderMesh = el("render-mesh");
@@ -48,8 +51,11 @@ const renderPanelRestore = el("render-panel-restore");
 if (
   !renderReset ||
   !renderViewMode ||
-  !renderWorld ||
-  !renderWorldNum ||
+  !renderChunkView ||
+  !renderOffsetX ||
+  !renderOffsetXNum ||
+  !renderOffsetY ||
+  !renderOffsetYNum ||
   !renderZoom ||
   !renderZoomNum ||
   !renderMesh ||
@@ -95,6 +101,11 @@ const MOVEMENT = new Set([
 ]);
 /** @type {Set<string>} */
 const keys = new Set();
+/** Chunk mode: accumulate WASD pan, commit every N movement frames to cut CPU terrain rebakes. */
+let chunkPanAccX = 0;
+let chunkPanAccY = 0;
+let chunkPanAccFrames = 0;
+const CHUNK_PAN_FRAMES_PER_COMMIT = 3;
 let state = { ...createDefaultState(), noiseGraph: createDefaultGraph() };
 let lastRafT = performance.now();
 let fpsEma = 0;
@@ -126,10 +137,27 @@ const graphApp = mountGraphApp(graphRoot, () => state, {
 
 const noise = createNoiseView(viewCanvas, () => state);
 
+function flushChunkPanAcc() {
+  if (chunkPanAccX === 0 && chunkPanAccY === 0) {
+    chunkPanAccFrames = 0;
+    return;
+  }
+  nudgeOffset(chunkPanAccX, chunkPanAccY);
+  chunkPanAccX = 0;
+  chunkPanAccY = 0;
+  chunkPanAccFrames = 0;
+}
+
 /**
  * @param {object} p
  */
 function applyRenderPatch(p) {
+  if (p && Object.prototype.hasOwnProperty.call(p, "offset")) {
+    flushChunkPanAcc();
+  }
+  if (p && Object.prototype.hasOwnProperty.call(p, "rendererViewMode") && p.rendererViewMode === "world") {
+    flushChunkPanAcc();
+  }
   state = { ...state, ...p };
   validateAndNormalize(state);
   syncRenderPanelFromState();
@@ -149,7 +177,9 @@ function setPairFloat(rangeEl, numEl, v) {
 }
 
 function syncRenderPanelFromState() {
-  setPairFloat(/** @type {HTMLInputElement} */ (renderWorld), /** @type {HTMLInputElement} */ (renderWorldNum), state.worldScale);
+  /** @type {HTMLSelectElement} */ (renderChunkView).value = String(state.chunkViewSize);
+  setPairFloat(/** @type {HTMLInputElement} */ (renderOffsetX), /** @type {HTMLInputElement} */ (renderOffsetXNum), state.offset.x);
+  setPairFloat(/** @type {HTMLInputElement} */ (renderOffsetY), /** @type {HTMLInputElement} */ (renderOffsetYNum), state.offset.y);
   setPairFloat(/** @type {HTMLInputElement} */ (renderZoom), /** @type {HTMLInputElement} */ (renderZoomNum), state.cameraZoom);
   setPairFloat(/** @type {HTMLInputElement} */ (renderMesh), /** @type {HTMLInputElement} */ (renderMeshNum), state.defaultChunkResolution);
   setPairFloat(/** @type {HTMLInputElement} */ (renderChunkR), /** @type {HTMLInputElement} */ (renderChunkRNum), state.chunkRadius);
@@ -175,10 +205,10 @@ function updateRenderPanelMode() {
       continue;
     }
     const w = n.getAttribute("data-render-for");
-    if (w === "simple") {
-      n.hidden = m !== "simple";
-    } else if (w === "complex") {
-      n.hidden = m !== "complex";
+    if (w === "chunk") {
+      n.toggleAttribute("hidden", m !== "chunk");
+    } else if (w === "world") {
+      n.toggleAttribute("hidden", m !== "world");
     }
   }
 }
@@ -211,14 +241,19 @@ function bindRangeNumberPair(rangeEl, numEl, buildPatch) {
 }
 
 bindRangeNumberPair(
-  /** @type {HTMLInputElement} */ (renderWorld),
-  /** @type {HTMLInputElement} */ (renderWorldNum),
-  (n) => ({ worldScale: n })
-);
-bindRangeNumberPair(
   /** @type {HTMLInputElement} */ (renderZoom),
   /** @type {HTMLInputElement} */ (renderZoomNum),
   (n) => ({ cameraZoom: n })
+);
+bindRangeNumberPair(
+  /** @type {HTMLInputElement} */ (renderOffsetX),
+  /** @type {HTMLInputElement} */ (renderOffsetXNum),
+  (n) => ({ offset: { ...state.offset, x: n } })
+);
+bindRangeNumberPair(
+  /** @type {HTMLInputElement} */ (renderOffsetY),
+  /** @type {HTMLInputElement} */ (renderOffsetYNum),
+  (n) => ({ offset: { ...state.offset, y: n } })
 );
 bindRangeNumberPair(
   /** @type {HTMLInputElement} */ (renderMesh),
@@ -256,18 +291,28 @@ bindRangeNumberPair(
 });
 /** @type {HTMLSelectElement} */ (renderViewMode).addEventListener("change", (e) => {
   const v = /** @type {HTMLSelectElement} */ (e.target).value;
-  if (v === "complex" || v === "simple") {
+  if (v === "world" || v === "chunk") {
     const next = (state.chunkReloadSeq | 0) + 1;
     applyRenderPatch({ rendererViewMode: v, chunkReloadSeq: next });
   }
 });
+/** @type {HTMLSelectElement} */ (renderChunkView).addEventListener("change", (e) => {
+  const raw = /** @type {HTMLSelectElement} */ (e.target).value;
+  const v = parseInt(raw, 10);
+  if (v === 1 || v === 3 || v === 5) {
+    const next = (state.chunkReloadSeq | 0) + 1;
+    applyRenderPatch({ chunkViewSize: v, chunkReloadSeq: next });
+  }
+});
 /** @type {HTMLButtonElement} */ (renderReset).addEventListener("click", () => {
+  flushChunkPanAcc();
   const d = createDefaultState();
   state = {
     ...state,
     offset: { x: 0, y: 0, z: 0 },
     cameraZoom: 1,
     flyCamera: { ...d.flyCamera },
+    chunkViewSize: d.chunkViewSize,
     chunkReloadSeq: (state.chunkReloadSeq | 0) + 1
   };
   validateAndNormalize(state);
@@ -382,6 +427,7 @@ function nudgeOffset(dx, dy) {
 }
 
 viewCanvas.addEventListener("blur", () => {
+  flushChunkPanAcc();
   keys.clear();
 });
 window.addEventListener(
@@ -418,7 +464,7 @@ viewCanvas.addEventListener(
       return;
     }
     e.preventDefault();
-    if (state.rendererViewMode === "simple") {
+    if (state.rendererViewMode === "chunk") {
       const z = state.cameraZoom - e.deltaY * 0.001;
       applyRenderPatch({ cameraZoom: z });
     } else {
@@ -440,7 +486,7 @@ viewCanvas.addEventListener(
 );
 
 viewCanvas.addEventListener("click", () => {
-  if (state.rendererViewMode === "complex") {
+  if (state.rendererViewMode === "world") {
     viewCanvas.requestPointerLock();
   }
 });
@@ -469,7 +515,7 @@ function shouldKeepRaf() {
   if (!isViewportKeyTarget()) {
     return false;
   }
-  if (state.rendererViewMode === "simple") {
+  if (state.rendererViewMode === "chunk") {
     for (const k of keys) {
       if (k === "KeyW" || k === "KeyA" || k === "KeyS" || k === "KeyD" || k.startsWith("Arrow")) {
         return true;
@@ -492,15 +538,16 @@ function runFrame() {
   raf = requestAnimationFrame(() => {
     raf = 0;
     const now = performance.now();
-    const dt = Math.min(0.05, (now - lastRafT) * 0.001);
+    const rawDtSec = Math.min(0.25, Math.max(1e-4, (now - lastRafT) * 0.001));
     lastRafT = now;
-    if (dt > 0.0001) {
-      const instFps = 1 / dt;
+    const dt = Math.min(0.05, rawDtSec);
+    {
+      const instFps = 1 / rawDtSec;
       fpsEma = fpsEma > 0 ? fpsEma * 0.88 + instFps * 0.12 : instFps;
     }
 
     if (isViewportKeyTarget()) {
-      if (state.rendererViewMode === "simple") {
+      if (state.rendererViewMode === "chunk") {
         const move = 2.0 * dt;
         let dx = 0;
         let dy = 0;
@@ -517,7 +564,14 @@ function runFrame() {
           dy += move;
         }
         if (dx !== 0 || dy !== 0) {
-          nudgeOffset(dx, dy);
+          chunkPanAccX += dx;
+          chunkPanAccY += dy;
+          chunkPanAccFrames += 1;
+          if (chunkPanAccFrames >= CHUNK_PAN_FRAMES_PER_COMMIT) {
+            flushChunkPanAcc();
+          }
+        } else {
+          flushChunkPanAcc();
         }
       } else {
         const c = { ...state.flyCamera };
@@ -554,7 +608,7 @@ function runFrame() {
     const h = viewCanvas.clientHeight | 0;
     const fps = fpsEma > 0.5 ? Math.round(fpsEma) : 0;
     let posText = "—";
-    if (state.rendererViewMode === "simple") {
+    if (state.rendererViewMode === "chunk") {
       const ox = -state.offset.x;
       const oy = -state.offset.y;
       const oz = state.offset.z;

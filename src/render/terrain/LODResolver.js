@@ -52,6 +52,9 @@ function buildInclusiveMaxRings(R, N) {
  * @returns {number} level in [0, N-1], higher = farther / coarser
  */
 export function resolveLodLevel(st, distRing) {
+  if (st.rendererViewMode === "chunk") {
+    return 0;
+  }
   if (!st.lodEnabled) {
     return 0;
   }
@@ -78,6 +81,11 @@ export function resolveLodLevel(st, distRing) {
 export function resolveMeshSegmentsForRing(st, distRing) {
   const defS = st.defaultChunkResolution | 0;
   const minS = st.minLodResolution | 0;
+  if (st.rendererViewMode === "chunk") {
+    /** Chunk snapshot: cap resolution — full defaultChunkResolution is very heavy for CPU graph bakes. */
+    const cap = 96;
+    return Math.max(2, Math.min(defS, cap));
+  }
   if (!st.lodEnabled) {
     return Math.max(2, defS);
   }

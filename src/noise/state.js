@@ -62,8 +62,18 @@ export function validateAndNormalize(s) {
   s.cellMetric = (s.cellMetric | 0) % 3;
   s.cellReturn = (s.cellReturn | 0) % 3;
 
-  const viewMode = s.rendererViewMode;
-  s.rendererViewMode = viewMode === "complex" ? "complex" : "simple";
+  let rvm = String(s.rendererViewMode || "chunk");
+  if (rvm === "complex") {
+    rvm = "world";
+  } else if (rvm === "simple") {
+    rvm = "chunk";
+  }
+  s.rendererViewMode = rvm === "world" ? "world" : "chunk";
+  let cvs = Math.floor(Number(s.chunkViewSize) || 3);
+  if (cvs !== 1 && cvs !== 3 && cvs !== 5) {
+    cvs = 3;
+  }
+  s.chunkViewSize = cvs;
   s.chunkRadius = Math.max(0, Math.min(12, Math.floor(Number(s.chunkRadius) || 0)));
   s.defaultChunkResolution = Math.max(
     8,

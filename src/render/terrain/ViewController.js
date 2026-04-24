@@ -7,7 +7,7 @@ const vLook = new Vector3();
  * @returns {{ x: number, y: number }}
  */
 export function getViewCenterWorldXY(st) {
-  if (st.rendererViewMode === "complex") {
+  if (st.rendererViewMode === "world") {
     return { x: st.flyCamera.x, y: st.flyCamera.y };
   }
   return { x: -st.offset.x, y: -st.offset.y };
@@ -46,7 +46,7 @@ const CAM_Y = 1.6;
  * @param {object} st
  */
 export function applyCameraFromViewMode(camera, st) {
-  if (st.rendererViewMode === "complex") {
+  if (st.rendererViewMode === "world") {
     const fc = st.flyCamera;
     camera.position.set(fc.x, fc.y, fc.z);
     const cosP = Math.cos(fc.pitch);

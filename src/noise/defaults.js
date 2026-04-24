@@ -129,8 +129,10 @@ export function createDefaultState() {
      */
     graphKey: 0,
     // --- Chunked terrain + view modes (renderer overhaul) ---
-    /** "simple" = editor pan preview; "complex" = free-fly */
-    rendererViewMode: "simple",
+    /** "chunk" = fixed grid snapshot + zoom; "world" = streaming + free-fly */
+    rendererViewMode: "chunk",
+    /** In chunk mode: edge length of the square chunk grid (1, 3, or 5), centered on origin. */
+    chunkViewSize: 3,
     /** Integer radius in chunk units: load chunks whose centers lie within this Euclidean distance of the camera (in chunk space). */
     chunkRadius: 2,
     /** Highest detail mesh resolution (segments per chunk edge) */
@@ -148,7 +150,7 @@ export function createDefaultState() {
     maxChunkRebuildsPerFrame: 3,
     /** Added to final terrain Z in world (after * meshHeight) */
     heightOffset: 0.0,
-    // Fly camera (Z-up, horizontal X/Y). Used when rendererViewMode === "complex"
+    // Fly camera (Z-up, horizontal X/Y). Used when rendererViewMode === "world"
     flyCamera: {
       x: 0,
       y: 0,

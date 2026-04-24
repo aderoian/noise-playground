@@ -24,23 +24,27 @@ function graphEvalPart(graph, graphRevision) {
 }
 
 /**
- * Fingerprint of all settings that should dirty every terrain chunk when changed.
  * @param {object} s
  * @param {import("../../graph/types.js").NoiseGraph | null} graph
+ * @param {{ includeOffset: boolean, includeCameraZoom: boolean }} o
  * @returns {string}
  */
-export function terrainSettingsSignature(s, graph) {
-  const o = s.offset;
-  return [
+function terrainSignatureCore(s, graph, o) {
+  const off = s.offset;
+  /** @type {(string|number|boolean)[]} */
+  const parts = [
     s.graphKey,
     s.graphRevision,
     graphEvalPart(graph, s.graphRevision),
     s.rendererViewMode,
+    s.chunkViewSize | 0,
     s.chunkRadius,
-    s.chunkReloadSeq | 0,
-    o.x,
-    o.y,
-    o.z,
+    s.chunkReloadSeq | 0
+  ];
+  if (o.includeOffset) {
+    parts.push(off.x, off.y, off.z);
+  }
+  parts.push(
     s.worldScale,
     s.frequency,
     s.amplitude,
@@ -66,13 +70,39 @@ export function terrainSettingsSignature(s, graph) {
     s.cellReturn,
     s.rigidExp,
     s.rigidWeight,
-    s.renderPreset,
-    s.cameraZoom,
+    s.renderPreset
+  );
+  if (o.includeCameraZoom) {
+    parts.push(s.cameraZoom);
+  }
+  parts.push(
     s.contrast,
     s.brightness,
     s.invert,
     s.colorRamp,
     s.animate,
     s.timeSpeed
-  ].join("@");
+  );
+  return parts.join("@");
+}
+
+/**
+ * Fingerprint of all settings that should dirty every terrain chunk when changed.
+ * @param {object} s
+ * @param {import("../../graph/types.js").NoiseGraph | null} graph
+ * @returns {string}
+ */
+export function terrainSettingsSignature(s, graph) {
+  return terrainSignatureCore(s, graph, { includeOffset: true, includeCameraZoom: true });
+}
+
+/**
+ * CPU mesh bake only: excludes pan offset and camera zoom so zoom / unrelated UI
+ * does not force full graph rebakes. Offset is tracked separately in RendererController.
+ * @param {object} s
+ * @param {import("../../graph/types.js").NoiseGraph | null} graph
+ * @returns {string}
+ */
+export function terrainMeshBakeSignature(s, graph) {
+  return terrainSignatureCore(s, graph, { includeOffset: false, includeCameraZoom: false });
 }
