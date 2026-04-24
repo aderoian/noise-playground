@@ -20,9 +20,29 @@
               Node graph: OpenSimplex, fractal, Worley &mdash; live height preview
             </p>
           </div>
+          <button
+            type="button"
+            class="graph-panel__min-btn"
+            id="graph-panel-minimize"
+            title="Minimize graph panel"
+            aria-expanded="true"
+            aria-controls="graph-column"
+          >
+            Minimize
+          </button>
         </div>
         <div id="graph-root" class="graph-panel__body"></div>
       </div>
+      <button
+        type="button"
+        class="graph-panel__restore"
+        id="graph-panel-restore"
+        title="Show graph panel"
+        hidden
+        aria-hidden="true"
+      >
+        Graph
+      </button>
       <div
         class="splitter splitter--vertical"
         id="split-graph-view"
@@ -33,6 +53,24 @@
         tabindex="0"
       ></div>
       <div class="viewport-wrap viewport-fullscreen" id="viewport-wrap">
+        <div
+          class="viewport-stats"
+          id="viewport-stats"
+          aria-live="polite"
+        >
+          <span id="viewport-stats-fps">— fps</span>
+          <span id="viewport-stats-pos">pos —</span>
+        </div>
+        <button
+          type="button"
+          class="render-panel__tab"
+          id="render-panel-restore"
+          title="Open render options"
+          hidden
+          aria-hidden="true"
+        >
+          Render
+        </button>
         <canvas
           id="view"
           tabindex="0"
@@ -43,7 +81,30 @@
           id="render-panel"
           aria-label="Render and preview options"
         >
-          <h2 class="render-panel__title">Render</h2>
+          <div class="render-panel__head-row">
+            <h2 class="render-panel__title">Render</h2>
+            <div class="render-panel__head-actions">
+              <button
+                type="button"
+                class="render-panel__icon-btn"
+                id="render-panel-minimize"
+                title="Minimize options"
+                aria-expanded="true"
+                aria-controls="render-panel"
+              >
+                Minimize
+              </button>
+              <button
+                type="button"
+                class="render-panel__icon-btn"
+                id="render-panel-close"
+                title="Close panel (use tab to reopen)"
+                aria-label="Close render options"
+              >
+                ×
+              </button>
+            </div>
+          </div>
           <label class="render-panel__row">
             <span class="render-panel__label">View</span>
             <select
@@ -180,75 +241,6 @@
             </div>
           </label>
           <label class="render-panel__row">
-            <span class="render-panel__label">Noise scale</span>
-            <div class="render-panel__dual">
-              <input
-                id="render-freq"
-                class="control-range"
-                type="range"
-                min="0.01"
-                max="20"
-                step="0.01"
-                value="1"
-              />
-              <input
-                id="render-freq-num"
-                class="control-number"
-                type="number"
-                min="0.01"
-                max="20"
-                step="0.01"
-                value="1"
-              />
-            </div>
-          </label>
-          <label class="render-panel__row">
-            <span class="render-panel__label">Height</span>
-            <div class="render-panel__dual">
-              <input
-                id="render-meshh"
-                class="control-range"
-                type="range"
-                min="0.02"
-                max="3"
-                step="0.01"
-                value="0.35"
-              />
-              <input
-                id="render-meshh-num"
-                class="control-number"
-                type="number"
-                min="0.02"
-                max="3"
-                step="0.01"
-                value="0.35"
-              />
-            </div>
-          </label>
-          <label class="render-panel__row">
-            <span class="render-panel__label">Z offset</span>
-            <div class="render-panel__dual">
-              <input
-                id="render-hoff"
-                class="control-range"
-                type="range"
-                min="-2"
-                max="2"
-                step="0.01"
-                value="0"
-              />
-              <input
-                id="render-hoff-num"
-                class="control-number"
-                type="number"
-                min="-2"
-                max="2"
-                step="0.01"
-                value="0"
-              />
-            </div>
-          </label>
-          <label class="render-panel__row">
             <span class="render-panel__label">LOD</span>
             <input
               type="checkbox"
@@ -257,6 +249,33 @@
               checked
             />
             <span class="render-panel__label-sub">on</span>
+          </label>
+          <label
+            class="render-panel__row"
+            title="Distance bands from view center to chunk radius; more layers = finer steps; outer bands are wider (progressive)"
+          >
+            <span class="render-panel__label">LOD layers</span>
+            <div class="render-panel__dual">
+              <input
+                id="render-lod-layers"
+                class="control-range"
+                type="range"
+                min="1"
+                max="12"
+                step="1"
+                value="3"
+              />
+              <input
+                id="render-lod-layers-num"
+                class="control-number"
+                type="number"
+                min="1"
+                max="12"
+                step="1"
+                value="3"
+                aria-label="Number of LOD distance bands"
+              />
+            </div>
           </label>
           <label class="render-panel__row">
             <span class="render-panel__label">Min LOD res</span>

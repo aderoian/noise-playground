@@ -131,7 +131,7 @@ export function createDefaultState() {
     // --- Chunked terrain + view modes (renderer overhaul) ---
     /** "simple" = editor pan preview; "complex" = free-fly */
     rendererViewMode: "simple",
-    /** Integer: load chunks in [cx - r, cx + r] in both axes (Chebyshev / square rings) */
+    /** Integer radius in chunk units: load chunks whose centers lie within this Euclidean distance of the camera (in chunk space). */
     chunkRadius: 2,
     /** Highest detail mesh resolution (segments per chunk edge) */
     defaultChunkResolution: 192,
@@ -139,6 +139,11 @@ export function createDefaultState() {
     chunkWorldSize: 0.4,
     /** When LOD enabled, this is the floor for mesh segments */
     minLodResolution: 8,
+    /**
+     * Number of LOD bands from view center to chunkRadius (integer ring distance).
+     * Band edges use a progressive curve (narrow near camera, wider far); each step halves mesh resolution.
+     */
+    lodLayerCount: 3,
     lodEnabled: true,
     maxChunkRebuildsPerFrame: 3,
     /** Added to final terrain Z in world (after * meshHeight) */

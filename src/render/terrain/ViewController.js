@@ -26,6 +26,18 @@ export function getCenterChunkCoord(st) {
   };
 }
 
+/**
+ * Camera position in chunk space (not floored) so a circular load radius
+ * is centered on the true view position, not on integer chunk indices.
+ * @param {object} st
+ * @returns {{ fxc: number, fyc: number }}
+ */
+export function getViewCenterChunkFloat(st) {
+  const c = getViewCenterWorldXY(st);
+  const S = st.chunkWorldSize > 0 ? st.chunkWorldSize : 0.1;
+  return { fxc: c.x / S, fyc: c.y / S };
+}
+
 const CAM_Z0 = 2.85;
 const CAM_Y = 1.6;
 

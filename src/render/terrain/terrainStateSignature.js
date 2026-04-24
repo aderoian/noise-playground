@@ -50,6 +50,7 @@ export function terrainSettingsSignature(s, graph) {
     s.chunkWorldSize,
     s.lodEnabled,
     s.minLodResolution,
+    s.lodLayerCount,
     s.viewMode,
     s.sliceZ,
     s.seed,

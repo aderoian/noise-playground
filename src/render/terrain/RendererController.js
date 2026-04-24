@@ -1,11 +1,15 @@
 import {
+  BackSide,
+  BoxGeometry,
   BufferGeometry,
+  Color,
   Float32BufferAttribute,
   GLSL3,
   Group,
   LineBasicMaterial,
   LineLoop,
   Mesh,
+  MeshBasicMaterial,
   PerspectiveCamera,
   RawShaderMaterial,
   Scene,
@@ -16,26 +20,28 @@ import { stateToUniforms } from "../../noise/defaults.js";
 import { validateAndNormalize } from "../../noise/state.js";
 import { buildChunkTerrainVertexShader, buildChunkTerrainFragmentShader } from "../../shaders/chunkMeshShaders.js";
 import { buildChunkTerrainGeometry } from "./MeshBuilder.js";
-import { chebyshevChunkDistance, resolveMeshSegmentsForRing } from "./LODResolver.js";
-import { getCenterChunkCoord, applyCameraFromViewMode, getViewCenterWorldXY } from "./ViewController.js";
+import { resolveLodLevel, resolveMeshSegmentsForRing } from "./LODResolver.js";
+import {
+  getCenterChunkCoord,
+  getViewCenterChunkFloat,
+  applyCameraFromViewMode,
+  getViewCenterWorldXY
+} from "./ViewController.js";
 import { terrainSettingsSignature } from "./terrainStateSignature.js";
 
-const LODS_DBG_COLORS = [
-  new Vector3(1, 0.3, 0.3),
-  new Vector3(0.3, 1, 0.3),
-  new Vector3(0.3, 0.4, 1),
-  new Vector3(1, 1, 0.3),
-  new Vector3(1, 0.3, 1),
-  new Vector3(0.3, 1, 1),
-  new Vector3(0.8, 0.6, 0.2)
-];
+/** Golden-ratio hues for arbitrary LOD level debug tint (shared refs, do not mutate). */
+const LOD_DBG_PALETTE = Array.from({ length: 32 }, (_, i) => {
+  const c = new Color().setHSL((i * 0.618033988749895) % 1, 0.62, 0.52);
+  return new Vector3(c.r, c.g, c.b);
+});
 
 /**
- * @param {number} d
+ * @param {number} level
  * @returns {import("three").Vector3}
  */
-function lodColorFor(d) {
-  return LODS_DBG_COLORS[Math.max(0, d) % LODS_DBG_COLORS.length];
+function lodColorForLevel(level) {
+  const idx = Math.max(0, level | 0) % LOD_DBG_PALETTE.length;
+  return LOD_DBG_PALETTE[idx];
 }
 
 /**
@@ -56,7 +62,23 @@ export function createRendererController(canvas, getState, getGraph) {
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 
   const scene = new Scene();
-  const camera = new PerspectiveCamera(48, 1, 0.05, 200);
+  const camera = new PerspectiveCamera(48, 1, 0.05, 500);
+
+  /** Unity-style orientation skybox: large inverted faces; follows camera. */
+  const skyboxMats = [
+    new MeshBasicMaterial({ color: 0x4a6b85, side: BackSide }),
+    new MeshBasicMaterial({ color: 0x4a6b85, side: BackSide }),
+    new MeshBasicMaterial({ color: 0x4d7ab8, side: BackSide }),
+    new MeshBasicMaterial({ color: 0x1e2f1f, side: BackSide }),
+    new MeshBasicMaterial({ color: 0x4d7290, side: BackSide }),
+    new MeshBasicMaterial({ color: 0x4d7290, side: BackSide })
+  ];
+  const skyboxGeo = new BoxGeometry(450, 450, 450);
+  const skybox = new Mesh(skyboxGeo, skyboxMats);
+  skybox.name = "skybox";
+  skybox.frustumCulled = false;
+  skybox.renderOrder = -1;
+  scene.add(skybox);
 
   const chunkRoot = new Group();
   scene.add(chunkRoot);
@@ -191,16 +213,26 @@ export function createRendererController(canvas, getState, getGraph) {
 
   function syncRing(st) {
     const c = getCenterChunkCoord(st);
+    const { fxc, fyc } = getViewCenterChunkFloat(st);
     const r = st.chunkRadius | 0;
     const want = new Set();
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        if (chebyshevChunkDistance(dx, 0, dy, 0) > r) {
-          continue;
+    if (r <= 0) {
+      want.add(`${c.cx},${c.cy}`);
+    } else {
+      const r2 = r * r;
+      const i0 = Math.floor(fxc - r) - 1;
+      const i1 = Math.ceil(fxc + r) + 1;
+      const j0 = Math.floor(fyc - r) - 1;
+      const j1 = Math.ceil(fyc + r) + 1;
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) {
+          const dxc = (i + 0.5) - fxc;
+          const dyc = (j + 0.5) - fyc;
+          if (dxc * dxc + dyc * dyc > r2) {
+            continue;
+          }
+          want.add(`${i},${j}`);
         }
-        const cx = c.cx + dx;
-        const cy = c.cy + dy;
-        want.add(`${cx},${cy}`);
       }
     }
     for (const k of Array.from(chunkMap.keys())) {
@@ -211,9 +243,11 @@ export function createRendererController(canvas, getState, getGraph) {
     for (const k of want) {
       if (!chunkMap.has(k)) {
         const [sx, sy] = k.split(",").map((n) => parseInt(n, 10) || 0);
-        const d = chebyshevChunkDistance(sx, sy, c.cx, c.cy);
+        const dE = Math.hypot(sx + 0.5 - fxc, sy + 0.5 - fyc);
+        const d = Math.max(0, Math.floor(dE + 1e-9));
         const segs0 = resolveMeshSegmentsForRing(st, d);
-        const dbg = lodColorFor(d);
+        const level = resolveLodLevel(st, d);
+        const dbg = lodColorForLevel(level);
         const emptyG = new BufferGeometry();
         const ch = {
           geometry: null,
@@ -252,12 +286,13 @@ export function createRendererController(canvas, getState, getGraph) {
   }
 
   function updateLodOnChunks(st) {
-    const c = getCenterChunkCoord(st);
+    const { fxc, fyc } = getViewCenterChunkFloat(st);
     for (const ch of chunkMap.values()) {
-      const d = chebyshevChunkDistance(ch.cx, ch.cy, c.cx, c.cy);
+      const dE = Math.hypot(ch.cx + 0.5 - fxc, ch.cy + 0.5 - fyc);
+      const d = Math.max(0, Math.floor(dE + 1e-9));
       const segsN = resolveMeshSegmentsForRing(st, d);
+      ch.debugRgb = lodColorForLevel(resolveLodLevel(st, d));
       if (d !== ch.dist) {
-        ch.debugRgb = lodColorFor(d);
         ch.dist = d;
       }
       if (segsN !== ch.segments) {
@@ -303,6 +338,7 @@ export function createRendererController(canvas, getState, getGraph) {
     }
 
     applyCameraFromViewMode(camera, st0);
+    skybox.position.copy(camera.position);
     stateToUniforms(st0, { width: w, height: h }, t, { u: uniforms });
 
     syncRing(st0);
@@ -373,6 +409,11 @@ export function createRendererController(canvas, getState, getGraph) {
       ro.disconnect();
       for (const k of Array.from(chunkMap.keys())) {
         removeAndDisposeChunk(k);
+      }
+      scene.remove(skybox);
+      skyboxGeo.dispose();
+      for (const m of skyboxMats) {
+        m.dispose();
       }
       solidMat.dispose();
       wireMat.dispose();

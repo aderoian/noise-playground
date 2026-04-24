@@ -70,6 +70,7 @@ export function validateAndNormalize(s) {
     Math.min(512, Math.floor(Number(s.defaultChunkResolution) || 192))
   );
   s.minLodResolution = Math.max(2, Math.min(256, Math.floor(Number(s.minLodResolution) || 8)));
+  s.lodLayerCount = Math.max(1, Math.min(12, Math.floor(Number(s.lodLayerCount) || 3)));
   s.chunkWorldSize = clamp01(
     Number.isFinite(s.chunkWorldSize) ? Number(s.chunkWorldSize) : 0.4,
     0.05,

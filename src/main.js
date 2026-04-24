@@ -3,7 +3,7 @@ import { createDefaultGraph } from "./graph/defaultGraph.js";
 import { createNoiseView } from "./render/NoiseView.js";
 import { validateAndNormalize } from "./noise/state.js";
 import { mountGraphApp } from "./graph/mount.jsx";
-import { initLayoutControls } from "./ui/layoutControl.js";
+import { initLayoutControls, isMobileLayout } from "./ui/layoutControl.js";
 
 const viewCanvas = /** @type {HTMLCanvasElement} */ (document.getElementById("view"));
 const graphRoot = document.getElementById("graph-root");
@@ -27,19 +27,23 @@ const renderChunkR = el("render-chunk-r");
 const renderChunkRNum = el("render-chunk-r-num");
 const renderChunkW = el("render-chunk-w");
 const renderChunkWNum = el("render-chunk-w-num");
-const renderFreq = el("render-freq");
-const renderFreqNum = el("render-freq-num");
-const renderMeshH = el("render-meshh");
-const renderMeshHNum = el("render-meshh-num");
-const renderHoff = el("render-hoff");
-const renderHoffNum = el("render-hoff-num");
 const renderLod = el("render-lod");
+const renderLodLayers = el("render-lod-layers");
+const renderLodLayersNum = el("render-lod-layers-num");
 const renderLodmin = el("render-lodmin");
 const renderLodminNum = el("render-lodmin-num");
 const renderRebuild = el("render-rebuild");
 const renderRebuildNum = el("render-rebuild-num");
 const debugBorders = el("debug-borders");
 const debugLod = el("debug-lod");
+const viewportStatsFps = el("viewport-stats-fps");
+const viewportStatsPos = el("viewport-stats-pos");
+const graphPanelMinimize = el("graph-panel-minimize");
+const graphPanelRestore = el("graph-panel-restore");
+const renderPanel = el("render-panel");
+const renderPanelClose = el("render-panel-close");
+const renderPanelMinimize = el("render-panel-minimize");
+const renderPanelRestore = el("render-panel-restore");
 
 if (
   !renderReset ||
@@ -56,21 +60,25 @@ if (
   !renderChunkRNum ||
   !renderChunkW ||
   !renderChunkWNum ||
-  !renderFreq ||
-  !renderFreqNum ||
-  !renderMeshH ||
-  !renderMeshHNum ||
-  !renderHoff ||
-  !renderHoffNum ||
   !renderLod ||
+  !renderLodLayers ||
+  !renderLodLayersNum ||
   !renderLodmin ||
   !renderLodminNum ||
   !renderRebuild ||
   !renderRebuildNum ||
   !debugBorders ||
-  !debugLod
+  !debugLod ||
+  !viewportStatsFps ||
+  !viewportStatsPos ||
+  !graphPanelMinimize ||
+  !graphPanelRestore ||
+  !renderPanel ||
+  !renderPanelClose ||
+  !renderPanelMinimize ||
+  !renderPanelRestore
 ) {
-  throw new Error("Missing render panel controls in DOM");
+  throw new Error("Missing render panel or viewport UI in DOM");
 }
 
 const MOVEMENT = new Set([
@@ -89,6 +97,24 @@ const MOVEMENT = new Set([
 const keys = new Set();
 let state = { ...createDefaultState(), noiseGraph: createDefaultGraph() };
 let lastRafT = performance.now();
+let fpsEma = 0;
+let lastGraphW = "480px";
+
+/**
+ * @returns {number}
+ */
+function readLayoutGraphW() {
+  try {
+    const raw = localStorage.getItem("np.layout.v1");
+    if (!raw) {
+      return 480;
+    }
+    const j = JSON.parse(raw);
+    return Math.max(260, Math.min(900, Number(j.graphW) || 480));
+  } catch {
+    return 480;
+  }
+}
 
 const graphApp = mountGraphApp(graphRoot, () => state, {
   applyPatch: (p) => {
@@ -128,9 +154,11 @@ function syncRenderPanelFromState() {
   setPairFloat(/** @type {HTMLInputElement} */ (renderMesh), /** @type {HTMLInputElement} */ (renderMeshNum), state.defaultChunkResolution);
   setPairFloat(/** @type {HTMLInputElement} */ (renderChunkR), /** @type {HTMLInputElement} */ (renderChunkRNum), state.chunkRadius);
   setPairFloat(/** @type {HTMLInputElement} */ (renderChunkW), /** @type {HTMLInputElement} */ (renderChunkWNum), state.chunkWorldSize);
-  setPairFloat(/** @type {HTMLInputElement} */ (renderFreq), /** @type {HTMLInputElement} */ (renderFreqNum), state.frequency);
-  setPairFloat(/** @type {HTMLInputElement} */ (renderMeshH), /** @type {HTMLInputElement} */ (renderMeshHNum), state.meshHeight);
-  setPairFloat(/** @type {HTMLInputElement} */ (renderHoff), /** @type {HTMLInputElement} */ (renderHoffNum), state.heightOffset);
+  setPairFloat(
+    /** @type {HTMLInputElement} */ (renderLodLayers),
+    /** @type {HTMLInputElement} */ (renderLodLayersNum),
+    state.lodLayerCount | 0
+  );
   setPairFloat(/** @type {HTMLInputElement} */ (renderLodmin), /** @type {HTMLInputElement} */ (renderLodminNum), state.minLodResolution);
   setPairFloat(/** @type {HTMLInputElement} */ (renderRebuild), /** @type {HTMLInputElement} */ (renderRebuildNum), state.maxChunkRebuildsPerFrame);
   /** @type {HTMLSelectElement} */ (renderPreset).value = normalizeRenderPresetKey(state.renderPreset);
@@ -208,19 +236,9 @@ bindRangeNumberPair(
   (n) => ({ chunkWorldSize: n })
 );
 bindRangeNumberPair(
-  /** @type {HTMLInputElement} */ (renderFreq),
-  /** @type {HTMLInputElement} */ (renderFreqNum),
-  (n) => ({ frequency: n })
-);
-bindRangeNumberPair(
-  /** @type {HTMLInputElement} */ (renderMeshH),
-  /** @type {HTMLInputElement} */ (renderMeshHNum),
-  (n) => ({ meshHeight: n })
-);
-bindRangeNumberPair(
-  /** @type {HTMLInputElement} */ (renderHoff),
-  /** @type {HTMLInputElement} */ (renderHoffNum),
-  (n) => ({ heightOffset: n })
+  /** @type {HTMLInputElement} */ (renderLodLayers),
+  /** @type {HTMLInputElement} */ (renderLodLayersNum),
+  (n) => ({ lodLayerCount: Math.floor(n) })
 );
 bindRangeNumberPair(
   /** @type {HTMLInputElement} */ (renderLodmin),
@@ -267,6 +285,75 @@ bindRangeNumberPair(
   applyRenderPatch({ debugColorByLod: /** @type {HTMLInputElement} */ (e.target).checked });
 });
 
+graphPanelMinimize.addEventListener("click", () => {
+  if (isMobileLayout()) {
+    return;
+  }
+  const root = document.documentElement;
+  lastGraphW = root.style.getPropertyValue("--graph-w") || `${readLayoutGraphW()}px`;
+  if (!lastGraphW || lastGraphW === "0px") {
+    lastGraphW = `${readLayoutGraphW()}px`;
+  }
+  document.body.classList.add("app-graph-minimized");
+  graphPanelMinimize.setAttribute("aria-expanded", "false");
+  graphPanelRestore.hidden = false;
+  graphPanelRestore.setAttribute("aria-hidden", "false");
+  schedule();
+});
+
+graphPanelRestore.addEventListener("click", () => {
+  document.body.classList.remove("app-graph-minimized");
+  if (!isMobileLayout()) {
+    document.documentElement.style.setProperty("--graph-w", lastGraphW);
+  }
+  graphPanelMinimize.setAttribute("aria-expanded", "true");
+  graphPanelRestore.hidden = true;
+  graphPanelRestore.setAttribute("aria-hidden", "true");
+  viewCanvas.focus({ preventScroll: true });
+  schedule();
+  window.dispatchEvent(new Event("resize"));
+});
+
+renderPanelMinimize.addEventListener("click", () => {
+  const rp = /** @type {HTMLElement} */ (renderPanel);
+  if (rp.classList.contains("render-panel--hidden")) {
+    return;
+  }
+  rp.classList.toggle("render-panel--rolled");
+  const rolled = rp.classList.contains("render-panel--rolled");
+  renderPanelMinimize.setAttribute("aria-expanded", rolled ? "false" : "true");
+  renderPanelMinimize.textContent = rolled ? "Expand" : "Minimize";
+  schedule();
+});
+
+function closeRenderOptions() {
+  const rp = /** @type {HTMLElement} */ (renderPanel);
+  rp.classList.add("render-panel--hidden", "render-panel--rolled");
+  /** @type {HTMLElement} */ (renderPanelRestore).hidden = false;
+  renderPanelRestore.setAttribute("aria-hidden", "false");
+  renderPanelMinimize.setAttribute("aria-expanded", "false");
+  schedule();
+}
+
+function openRenderOptions() {
+  const rp = /** @type {HTMLElement} */ (renderPanel);
+  rp.classList.remove("render-panel--hidden", "render-panel--rolled");
+  /** @type {HTMLElement} */ (renderPanelRestore).hidden = true;
+  renderPanelRestore.setAttribute("aria-hidden", "true");
+  renderPanelMinimize.setAttribute("aria-expanded", "true");
+  renderPanelMinimize.textContent = "Minimize";
+  viewCanvas.focus({ preventScroll: true });
+  schedule();
+}
+
+renderPanelClose.addEventListener("click", () => {
+  closeRenderOptions();
+});
+
+renderPanelRestore.addEventListener("click", () => {
+  openRenderOptions();
+});
+
 syncRenderPanelFromState();
 updateRenderPanelMode();
 
@@ -308,6 +395,7 @@ window.addEventListener(
     }
     e.preventDefault();
     keys.add(e.code);
+    schedule();
   },
   { passive: false }
 );
@@ -315,6 +403,7 @@ window.addEventListener(
   "keyup",
   (e) => {
     keys.delete(e.code);
+    schedule();
   },
   { passive: true }
 );
@@ -405,6 +494,10 @@ function runFrame() {
     const now = performance.now();
     const dt = Math.min(0.05, (now - lastRafT) * 0.001);
     lastRafT = now;
+    if (dt > 0.0001) {
+      const instFps = 1 / dt;
+      fpsEma = fpsEma > 0 ? fpsEma * 0.88 + instFps * 0.12 : instFps;
+    }
 
     if (isViewportKeyTarget()) {
       if (state.rendererViewMode === "simple") {
@@ -459,6 +552,19 @@ function runFrame() {
     const ms = performance.now() - t0;
     const w = viewCanvas.clientWidth | 0;
     const h = viewCanvas.clientHeight | 0;
+    const fps = fpsEma > 0.5 ? Math.round(fpsEma) : 0;
+    let posText = "—";
+    if (state.rendererViewMode === "simple") {
+      const ox = -state.offset.x;
+      const oy = -state.offset.y;
+      const oz = state.offset.z;
+      posText = `view (${ox.toFixed(1)}, ${oy.toFixed(1)}, ${oz.toFixed(1)})`;
+    } else {
+      const f = state.flyCamera;
+      posText = `fly (${f.x.toFixed(1)}, ${f.y.toFixed(1)}, ${f.z.toFixed(1)})`;
+    }
+    viewportStatsFps.textContent = `${fps} fps  ·  ${ms.toFixed(1)} ms`;
+    viewportStatsPos.textContent = posText;
     const info = /** @type {any} */ (noise).viewInfo;
     const tris = info.triangleCount ?? 0;
     const chunks = info.activeChunkCount ?? 0;
