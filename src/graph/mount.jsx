@@ -1,7 +1,11 @@
 import { createRoot } from "react-dom/client";
 import React from "react";
 import { GraphEditor } from "../ui/graph/GraphEditor.jsx";
-import { graphEvalSignature } from "./evalSignature.js";
+import {
+  graphEvalSignature,
+  graphParamSignature,
+  graphTopologySignature
+} from "./evalSignature.js";
 
 /**
  * Bumps `graphRevision` when the *eval* payload changes (not node positions / layout).
@@ -15,23 +19,54 @@ import { graphEvalSignature } from "./evalSignature.js";
 export function mountGraphApp(el, getState, api) {
   const root = createRoot(el);
   let lastGraphEvalSignature = null;
+  let lastGraphTopologySignature = null;
+  let lastGraphParamSignature = null;
 
   function onG(/** @type {import("./types.js").NoiseGraph} */ g) {
-    const sig = graphEvalSignature(g);
-    if (lastGraphEvalSignature !== null && sig === lastGraphEvalSignature) {
+    const evalSig = graphEvalSignature(g);
+    const topoSig = graphTopologySignature(g);
+    const paramSig = graphParamSignature(g);
+    if (lastGraphEvalSignature !== null && evalSig === lastGraphEvalSignature) {
       api.applyPatch({ noiseGraph: g });
       return;
     }
-    lastGraphEvalSignature = sig;
+    const topologyChanged =
+      lastGraphTopologySignature === null || topoSig !== lastGraphTopologySignature;
+    const paramChanged =
+      lastGraphParamSignature === null || paramSig !== lastGraphParamSignature;
+    lastGraphEvalSignature = evalSig;
+    lastGraphTopologySignature = topoSig;
+    lastGraphParamSignature = paramSig;
     const st = getState();
-    const nextRev = (st.graphRevision | 0) + 1;
-    api.applyPatch({ noiseGraph: g, graphRevision: nextRev });
+    const nextEvalRev = (st.graphRevision | 0) + 1;
+    const nextTopoRev = (st.graphTopologyRevision | 0) + (topologyChanged ? 1 : 0);
+    const nextParamRev = (st.graphParamRevision | 0) + (paramChanged ? 1 : 0);
+    api.applyPatch({
+      noiseGraph: g,
+      graphRevision: nextEvalRev,
+      graphTopologyRevision: nextTopoRev,
+      graphParamRevision: nextParamRev,
+      graphTopologyHash: topoSig,
+      graphParamHash: paramSig,
+      graphLastEditKind: topologyChanged ? "topology" : "param"
+    });
   }
   function onFile(/** @type {import("./types.js").NoiseGraph} */ g) {
     lastGraphEvalSignature = null;
+    lastGraphTopologySignature = null;
+    lastGraphParamSignature = null;
     const st = getState();
     const nextKey = (st.graphKey | 0) + 1;
-    api.applyPatch({ noiseGraph: g, graphKey: nextKey });
+    api.applyPatch({
+      noiseGraph: g,
+      graphKey: nextKey,
+      graphRevision: (st.graphRevision | 0) + 1,
+      graphTopologyRevision: (st.graphTopologyRevision | 0) + 1,
+      graphParamRevision: (st.graphParamRevision | 0) + 1,
+      graphTopologyHash: graphTopologySignature(g),
+      graphParamHash: graphParamSignature(g),
+      graphLastEditKind: "topology"
+    });
   }
   return {
     render() {

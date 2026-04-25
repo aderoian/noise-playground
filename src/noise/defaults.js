@@ -118,6 +118,16 @@ export function createDefaultState() {
      * @type {number}
      */
     graphRevision: 0,
+    /** Incremented only when graph topology or compile-time settings change. */
+    graphTopologyRevision: 0,
+    /** Incremented when graph runtime params/pin defaults or topology change. */
+    graphParamRevision: 0,
+    /** Stable topology hash used for shader + pipeline caches. */
+    graphTopologyHash: "",
+    /** Stable runtime param hash used for uniform/storage updates. */
+    graphParamHash: "",
+    /** Last classified graph edit: layout | param | topology */
+    graphLastEditKind: "topology",
     /**
      * Procedural graph asset (or null)
      * @type {import("../graph/types.js").NoiseGraph | null}
@@ -163,6 +173,14 @@ export function createDefaultState() {
     debugShowChunkCoords: false,
     debugColorByLod: false,
     debugShowRendererStats: true,
+    debugShowDirtyChunks: false,
+    debugShowShaderPreview: false,
+    debugShowHeightPreview: false,
+    debugShowGpuTiming: true,
+    /** auto | webgpu | cpu */
+    terrainBackend: "auto",
+    /** Debounce for topology-driven WGSL recompiles. */
+    graphCompileDebounceMs: 120,
     /** Bumped to force all chunk meshes to rebuild (reset view, etc.) */
     chunkReloadSeq: 0
   };

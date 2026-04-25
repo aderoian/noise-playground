@@ -49,6 +49,13 @@ export function validateAndNormalize(s) {
   s.useGraph = Boolean(s.useGraph);
   s.graphKey = Math.max(0, Math.floor(Number(s.graphKey) || 0));
   s.graphRevision = Math.max(0, Math.floor(Number(s.graphRevision) || 0));
+  s.graphTopologyRevision = Math.max(0, Math.floor(Number(s.graphTopologyRevision) || 0));
+  s.graphParamRevision = Math.max(0, Math.floor(Number(s.graphParamRevision) || 0));
+  s.graphTopologyHash = String(s.graphTopologyHash || "");
+  s.graphParamHash = String(s.graphParamHash || "");
+  const graphEditKind = String(s.graphLastEditKind || "topology");
+  s.graphLastEditKind =
+    graphEditKind === "layout" || graphEditKind === "param" ? graphEditKind : "topology";
   s.graphBakeW = Math.max(8, Math.min(1024, Math.floor(s.graphBakeW) || 128));
   s.graphBakeH = Math.max(8, Math.min(1024, Math.floor(s.graphBakeH) || 128));
   s.renderPreset = normalizeRenderPresetKey(/** @type {string} */ (s.renderPreset));
@@ -97,6 +104,16 @@ export function validateAndNormalize(s) {
   s.debugShowChunkCoords = Boolean(s.debugShowChunkCoords);
   s.debugColorByLod = Boolean(s.debugColorByLod);
   s.debugShowRendererStats = s.debugShowRendererStats !== false;
+  s.debugShowDirtyChunks = Boolean(s.debugShowDirtyChunks);
+  s.debugShowShaderPreview = Boolean(s.debugShowShaderPreview);
+  s.debugShowHeightPreview = Boolean(s.debugShowHeightPreview);
+  s.debugShowGpuTiming = s.debugShowGpuTiming !== false;
+  const backend = String(s.terrainBackend || "auto");
+  s.terrainBackend = backend === "cpu" || backend === "webgpu" ? backend : "auto";
+  s.graphCompileDebounceMs = Math.max(
+    0,
+    Math.min(1000, Math.floor(Number(s.graphCompileDebounceMs) || 120))
+  );
   s.chunkReloadSeq = Math.max(0, Math.floor(Number(s.chunkReloadSeq) || 0));
   if (!s.flyCamera || typeof s.flyCamera !== "object") {
     s.flyCamera = { x: 0, y: 0, z: 1.2, yaw: 0, pitch: -0.35 };

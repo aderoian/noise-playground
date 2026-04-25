@@ -1,8 +1,14 @@
-import { graphEvalSignature } from "../../graph/evalSignature.js";
+import {
+  graphEvalSignature,
+  graphParamSignature,
+  graphTopologySignature
+} from "../../graph/evalSignature.js";
 
 let _graphRef = null;
 let _graphRev = -1;
 let _graphEvalCached = "";
+let _graphTopoCached = "";
+let _graphParamCached = "";
 
 /**
  * @param {import("../../graph/types.js").NoiseGraph | null | undefined} graph
@@ -20,7 +26,35 @@ function graphEvalPart(graph, graphRevision) {
   _graphRef = graph;
   _graphRev = rev;
   _graphEvalCached = graphEvalSignature(graph);
+  _graphTopoCached = graphTopologySignature(graph);
+  _graphParamCached = graphParamSignature(graph);
   return _graphEvalCached;
+}
+
+/**
+ * @param {import("../../graph/types.js").NoiseGraph | null | undefined} graph
+ * @param {number} graphRevision
+ * @returns {string}
+ */
+function graphTopologyPart(graph, graphRevision) {
+  if (!graph) {
+    return "";
+  }
+  graphEvalPart(graph, graphRevision);
+  return _graphTopoCached;
+}
+
+/**
+ * @param {import("../../graph/types.js").NoiseGraph | null | undefined} graph
+ * @param {number} graphRevision
+ * @returns {string}
+ */
+function graphParamPart(graph, graphRevision) {
+  if (!graph) {
+    return "";
+  }
+  graphEvalPart(graph, graphRevision);
+  return _graphParamCached;
 }
 
 /**
@@ -105,4 +139,54 @@ export function terrainSettingsSignature(s, graph) {
  */
 export function terrainMeshBakeSignature(s, graph) {
   return terrainSignatureCore(s, graph, { includeOffset: false, includeCameraZoom: false });
+}
+
+/**
+ * Fingerprint of graph topology only, used to cache generated WGSL and pipelines.
+ * @param {object} s
+ * @param {import("../../graph/types.js").NoiseGraph | null} graph
+ * @returns {string}
+ */
+export function terrainGraphCompileSignature(s, graph) {
+  return [
+    s.useGraph ? 1 : 0,
+    s.graphKey | 0,
+    s.graphTopologyRevision | 0,
+    s.graphTopologyHash || graphTopologyPart(graph, s.graphRevision)
+  ].join("@");
+}
+
+/**
+ * Fingerprint of data that changes chunk height contents without requiring shader regeneration.
+ * Includes graph runtime params, noise uniforms, offsets, view slicing, and runtime chunk settings.
+ * @param {object} s
+ * @param {import("../../graph/types.js").NoiseGraph | null} graph
+ * @returns {string}
+ */
+export function terrainChunkContentSignature(s, graph) {
+  const off = s.offset;
+  return [
+    s.useGraph ? 1 : 0,
+    s.graphKey | 0,
+    s.graphRevision | 0,
+    s.graphParamRevision | 0,
+    s.graphParamHash || graphParamPart(graph, s.graphRevision),
+    off.x,
+    off.y,
+    off.z,
+    s.sliceZ,
+    s.animate ? 1 : 0,
+    s.timeSpeed,
+    s.seed,
+    s.amplitude,
+    s.meshHeight,
+    s.heightOffset,
+    s.defaultChunkResolution | 0,
+    s.chunkWorldSize,
+    s.lodEnabled ? 1 : 0,
+    s.minLodResolution | 0,
+    s.lodLayerCount | 0,
+    s.chunkRadius | 0,
+    s.chunkReloadSeq | 0
+  ].join("@");
 }

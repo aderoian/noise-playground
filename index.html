@@ -106,6 +106,14 @@
             </div>
           </div>
           <label class="render-panel__row">
+            <span class="render-panel__label">Backend</span>
+            <select id="render-backend" class="control-select" aria-label="Terrain renderer backend">
+              <option value="auto">Auto</option>
+              <option value="webgpu">WebGPU</option>
+              <option value="cpu">CPU fallback</option>
+            </select>
+          </label>
+          <label class="render-panel__row">
             <span class="render-panel__label">View</span>
             <select
               id="render-view-mode"
@@ -361,9 +369,17 @@
             <input type="checkbox" id="debug-borders" />
             <span>Chunk edges</span>
           </label>
+          <label class="render-panel__row render-panel__row--inline">
+            <input type="checkbox" id="debug-dirty" />
+            <span>Dirty chunks</span>
+          </label>
           <label class="render-panel__row render-panel__row--inline" data-render-for="world" hidden>
             <input type="checkbox" id="debug-lod" />
             <span>Color LOD</span>
+          </label>
+          <label class="render-panel__row render-panel__row--inline">
+            <input type="checkbox" id="debug-shader-preview" />
+            <span>Shader preview</span>
           </label>
           <span class="render-panel__hint" id="render-mesh-verts" aria-live="polite"
             >—</span

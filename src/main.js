@@ -14,6 +14,7 @@ if (!viewCanvas || !graphRoot || !diagContent) {
 
 const el = (id) => document.getElementById(id);
 const renderReset = el("render-reset");
+const renderBackend = el("render-backend");
 const renderViewMode = el("render-view-mode");
 const renderChunkView = el("render-chunk-view");
 const renderOffsetX = el("render-offset-x");
@@ -38,7 +39,9 @@ const renderLodminNum = el("render-lodmin-num");
 const renderRebuild = el("render-rebuild");
 const renderRebuildNum = el("render-rebuild-num");
 const debugBorders = el("debug-borders");
+const debugDirty = el("debug-dirty");
 const debugLod = el("debug-lod");
+const debugShaderPreview = el("debug-shader-preview");
 const viewportStatsFps = el("viewport-stats-fps");
 const viewportStatsPos = el("viewport-stats-pos");
 const graphPanelMinimize = el("graph-panel-minimize");
@@ -50,6 +53,7 @@ const renderPanelRestore = el("render-panel-restore");
 
 if (
   !renderReset ||
+  !renderBackend ||
   !renderViewMode ||
   !renderChunkView ||
   !renderOffsetX ||
@@ -74,7 +78,9 @@ if (
   !renderRebuild ||
   !renderRebuildNum ||
   !debugBorders ||
+  !debugDirty ||
   !debugLod ||
+  !debugShaderPreview ||
   !viewportStatsFps ||
   !viewportStatsPos ||
   !graphPanelMinimize ||
@@ -192,10 +198,13 @@ function syncRenderPanelFromState() {
   setPairFloat(/** @type {HTMLInputElement} */ (renderLodmin), /** @type {HTMLInputElement} */ (renderLodminNum), state.minLodResolution);
   setPairFloat(/** @type {HTMLInputElement} */ (renderRebuild), /** @type {HTMLInputElement} */ (renderRebuildNum), state.maxChunkRebuildsPerFrame);
   /** @type {HTMLSelectElement} */ (renderPreset).value = normalizeRenderPresetKey(state.renderPreset);
+  /** @type {HTMLSelectElement} */ (renderBackend).value = state.terrainBackend;
   /** @type {HTMLSelectElement} */ (renderViewMode).value = state.rendererViewMode;
   /** @type {HTMLInputElement} */ (renderLod).checked = state.lodEnabled;
   /** @type {HTMLInputElement} */ (debugBorders).checked = state.debugShowChunkBorders;
+  /** @type {HTMLInputElement} */ (debugDirty).checked = state.debugShowDirtyChunks;
   /** @type {HTMLInputElement} */ (debugLod).checked = state.debugColorByLod;
+  /** @type {HTMLInputElement} */ (debugShaderPreview).checked = state.debugShowShaderPreview;
 }
 
 function updateRenderPanelMode() {
@@ -285,6 +294,12 @@ bindRangeNumberPair(
   /** @type {HTMLInputElement} */ (renderRebuildNum),
   (n) => ({ maxChunkRebuildsPerFrame: Math.floor(n) })
 );
+/** @type {HTMLSelectElement} */ (renderBackend).addEventListener("change", (e) => {
+  const v = /** @type {HTMLSelectElement} */ (e.target).value;
+  if (v === "auto" || v === "webgpu" || v === "cpu") {
+    applyRenderPatch({ terrainBackend: v });
+  }
+});
 /** @type {HTMLSelectElement} */ (renderPreset).addEventListener("change", (e) => {
   const v = /** @type {HTMLSelectElement} */ (e.target).value;
   applyRenderPatch({ renderPreset: v });
@@ -326,8 +341,14 @@ bindRangeNumberPair(
 /** @type {HTMLInputElement} */ (debugBorders).addEventListener("change", (e) => {
   applyRenderPatch({ debugShowChunkBorders: /** @type {HTMLInputElement} */ (e.target).checked });
 });
+/** @type {HTMLInputElement} */ (debugDirty).addEventListener("change", (e) => {
+  applyRenderPatch({ debugShowDirtyChunks: /** @type {HTMLInputElement} */ (e.target).checked });
+});
 /** @type {HTMLInputElement} */ (debugLod).addEventListener("change", (e) => {
   applyRenderPatch({ debugColorByLod: /** @type {HTMLInputElement} */ (e.target).checked });
+});
+/** @type {HTMLInputElement} */ (debugShaderPreview).addEventListener("change", (e) => {
+  applyRenderPatch({ debugShowShaderPreview: /** @type {HTMLInputElement} */ (e.target).checked });
 });
 
 graphPanelMinimize.addEventListener("click", () => {
@@ -622,12 +643,25 @@ function runFrame() {
     const info = /** @type {any} */ (noise).viewInfo;
     const tris = info.triangleCount ?? 0;
     const chunks = info.activeChunkCount ?? 0;
+    const dirty = info.dirtyChunkCount ?? 0;
     const center = info.centerChunk ?? "—";
     const mode = state.rendererViewMode;
     if (state.debugShowRendererStats !== false) {
+      const backend = info.backend || state.terrainBackend;
+      const compileStatus = info.compileStatus || "—";
+      const gpuMs =
+        state.debugShowGpuTiming !== false && Number.isFinite(info.gpuGenMs)
+          ? `  |  gpu-gen: ${Number(info.gpuGenMs).toFixed(2)} ms`
+          : "";
+      const graphHash = info.graphHash ? `  |  graph: ${String(info.graphHash).slice(0, 48)}` : "";
+      const compileErrors = info.compileErrors ? `\nCompile: ${info.compileErrors}` : "";
+      const shaderPreview =
+        state.debugShowShaderPreview && info.shaderPreview
+          ? `\nWGSL:\n${info.shaderPreview}`
+          : "";
       diagContent.textContent = `Frame: ${ms.toFixed(2)} ms  |  ${w}×${h}  |  ` +
-        `tris: ~${tris.toLocaleString()}  |  chunks: ${chunks}  |  center: ${center}  |  ${mode}  |  ` +
-        `pos ${info.flyPos || ""} `;
+        `tris: ~${tris.toLocaleString()}  |  chunks: ${chunks}  |  dirty: ${dirty}  |  center: ${center}  |  ${mode}  |  ` +
+        `backend: ${backend}  |  compile: ${compileStatus}${gpuMs}${graphHash}${compileErrors}${shaderPreview}`;
     }
     renderMeshVerts.textContent = `~${tris.toLocaleString()} tris, max res ${state.defaultChunkResolution} — click canvas to focus keys`;
 
