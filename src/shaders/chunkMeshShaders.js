@@ -7,11 +7,14 @@ uniform mat4 projectionMatrix;
 in vec3 position;
 in vec3 normal;
 in float hRaw;
+in vec3 vColor;
 out float vHRaw;
 out vec3 vNormalW;
+out vec3 vAlbedo;
 void main() {
   vHRaw = hRaw;
   vNormalW = normal;
+  vAlbedo = vColor;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
@@ -23,10 +26,12 @@ uniform vec3 uLightDir;
 uniform float uLightAmbient;
 uniform float uLightDiffuse;
 uniform int uColorMode;
+uniform int uTerrainShade; // 0 classic ramp, 1 biome vertex albedo, 2 mix
 uniform vec3 uDebugColor;
 ${noiseColor}
 in float vHRaw;
 in vec3 vNormalW;
+in vec3 vAlbedo;
 out vec4 fragColor;
 void main() {
   vec3 nW = normalize(vNormalW);
@@ -38,7 +43,13 @@ void main() {
     return;
   }
   float t = displayScalarFromNoise(vHRaw);
-  vec3 albedo = rampColor(t);
+  vec3 ramp = rampColor(t);
+  vec3 albedo = ramp;
+  if (uTerrainShade == 1) {
+    albedo = vAlbedo;
+  } else if (uTerrainShade == 2) {
+    albedo = mix(ramp, vAlbedo, 0.5);
+  }
   vec3 col = albedo * diff;
   fragColor = vec4(col, 1.0);
 }

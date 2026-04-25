@@ -47,12 +47,29 @@ export function validateAndNormalize(s) {
   );
   s.meshWireframe = Boolean(s.meshWireframe);
   s.useGraph = Boolean(s.useGraph);
+  s.useBiomes = Boolean(s.useBiomes);
+  const tvm = String(s.terrainVizMode || "default");
+  s.terrainVizMode =
+    tvm === "height" ||
+    tvm === "color" ||
+    tvm === "blend" ||
+    tvm === "placement" ||
+    tvm === "biomeId" ||
+    tvm === "weight" ||
+    tvm === "biomePreview" ||
+    tvm === "default"
+      ? tvm
+      : "default";
+  s.biomePreviewIndex = Math.max(0, Math.floor(Number(s.biomePreviewIndex) || 0));
   s.graphKey = Math.max(0, Math.floor(Number(s.graphKey) || 0));
   s.graphRevision = Math.max(0, Math.floor(Number(s.graphRevision) || 0));
   s.graphTopologyRevision = Math.max(0, Math.floor(Number(s.graphTopologyRevision) || 0));
   s.graphParamRevision = Math.max(0, Math.floor(Number(s.graphParamRevision) || 0));
   s.graphTopologyHash = String(s.graphTopologyHash || "");
   s.graphParamHash = String(s.graphParamHash || "");
+  const get = String(s.graphEditTarget || "main");
+  s.graphEditTarget =
+    get === "main" || get === "placement" || get.startsWith("biome:") ? get : "main";
   const graphEditKind = String(s.graphLastEditKind || "topology");
   s.graphLastEditKind =
     graphEditKind === "layout" || graphEditKind === "param" ? graphEditKind : "topology";

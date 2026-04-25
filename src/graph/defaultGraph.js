@@ -1,10 +1,11 @@
 import { addLink, addNode, createGraph } from "./model.js";
 import { createBuiltinRegistry } from "./registry.js";
+import { createDefaultBiomeProject } from "./biomeProject.js";
 
 const registry = /* @__PURE__ */ (() => createBuiltinRegistry())();
 
 /**
- * A simple valid graph: FBM( context position ) -> Output
+ * A simple valid graph: FBM( context position ) -> Output, plus default biome project
  * @returns {import("./types.js").NoiseGraph}
  */
 export function createDefaultGraph() {
@@ -29,5 +30,6 @@ export function createDefaultGraph() {
     registry
   );
   g.outputNodeId = out;
+  g.biomeProject = createDefaultBiomeProject();
   return g;
 }

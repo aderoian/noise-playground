@@ -2,21 +2,26 @@ import { createGraph, addNode, addLink } from "./model.js";
 import { createBuiltinRegistry } from "./registry.js";
 import { ASSET_VERSION } from "./types.js";
 import { syncLegacyParamsToInputPins } from "./pinSync.js";
+import { cloneBiomeProject, cloneNoiseGraph, ensureBiomeProject } from "./biomeProject.js";
 
 const reg = /* @__PURE__ */ (() => createBuiltinRegistry())();
 
 /**
  * @param {import("@xyflow/react").Node[]} nodes
  * @param {import("@xyflow/react").Edge[]} edges
- * @param {import("./types.js").NoiseGraph | null} [prev]
+ * @param {object} o
+ * @param {import("./types.js").NoiseGraph | null} [o.nameSource]
+ * @param {string} [o.graphName]
+ * @param {import("./types.js").NoiseGraph | null} [o.idSource]
+ * @param {import("./types.js").NoiseGraph | null} [o.outputFallback]
+ * @param {boolean} [o.preserveOutputFallback]
  * @returns {import("./types.js").NoiseGraph}
  */
-export function flowToGraph(nodes, edges, prev) {
-  const g = createGraph(
-    (prev && prev.name) || "Graph"
-  );
-  if (prev) {
-    g.id = prev.id;
+function buildGraphFromFlow(nodes, edges, o = {}) {
+  const name = o.graphName || (o.nameSource && o.nameSource.name) || "Graph";
+  const g = createGraph(name);
+  if (o.idSource) {
+    g.id = o.idSource.id;
   }
   g.version = ASSET_VERSION;
   g.outputNodeId = undefined;
@@ -60,17 +65,112 @@ export function flowToGraph(nodes, edges, prev) {
   const out = g.nodes.find((n) => n.typeId === "output" && !n.isUnknown);
   if (out) {
     g.outputNodeId = out.id;
+  } else if (o.preserveOutputFallback && o.outputFallback) {
+    g.outputNodeId = o.outputFallback.outputNodeId;
   } else {
-    g.outputNodeId = prev?.outputNodeId;
+    g.outputNodeId = o.outputFallback?.outputNodeId;
+  }
+  return g;
+}
+
+/**
+ * @param {import("@xyflow/react").Node[]} nodes
+ * @param {import("@xyflow/react").Edge[]} edges
+ * @param {import("./types.js").NoiseGraph | null} [prev] full graph (for id/biome merge)
+ * @param {string} [graphEditTarget] "main" | "placement" | "biome:<id>"
+ * @returns {import("./types.js").NoiseGraph}
+ */
+export function flowToGraph(nodes, edges, prev, graphEditTarget) {
+  const t = graphEditTarget || "main";
+  if (t === "main") {
+    const g = buildGraphFromFlow(nodes, edges, {
+      nameSource: prev || undefined,
+      idSource: prev || undefined,
+      outputFallback: prev || null,
+      preserveOutputFallback: true
+    });
+    if (prev && prev.biomeProject) {
+      g.biomeProject = cloneBiomeProject(prev.biomeProject);
+    }
+    return g;
+  }
+  if (t === "placement") {
+    const sub = buildGraphFromFlow(nodes, edges, {
+      graphName: (prev && prev.biomeProject && prev.biomeProject.placementGraph && prev.biomeProject.placementGraph.name) || "Placement",
+      outputFallback: prev && prev.biomeProject ? prev.biomeProject.placementGraph : null,
+      preserveOutputFallback: true
+    });
+    if (!prev) {
+      return sub;
+    }
+    const g = cloneNoiseGraph(prev);
+    g.biomeProject = cloneBiomeProject(ensureBiomeProject(g));
+    g.biomeProject.placementGraph = sub;
+    return g;
+  }
+  if (t.startsWith("biome:")) {
+    const bid = t.slice(6);
+    const bPrev = prev && prev.biomeProject ? prev.biomeProject.biomes.find((b) => b.id === bid) : null;
+    const sub = buildGraphFromFlow(nodes, edges, {
+      graphName: (bPrev && bPrev.terrainGraph && bPrev.terrainGraph.name) || "BiomeTerrain",
+      outputFallback: bPrev ? bPrev.terrainGraph : null,
+      preserveOutputFallback: true
+    });
+    if (!prev) {
+      return sub;
+    }
+    const g = cloneNoiseGraph(prev);
+    g.biomeProject = cloneBiomeProject(ensureBiomeProject(g));
+    const ix = g.biomeProject.biomes.findIndex((b) => b.id === bid);
+    if (ix < 0) {
+      return g;
+    }
+    const b0 = g.biomeProject.biomes[ix];
+    g.biomeProject.biomes = [...g.biomeProject.biomes];
+    g.biomeProject.biomes[ix] = { ...b0, terrainGraph: sub };
+    return g;
+  }
+  const g = buildGraphFromFlow(nodes, edges, {
+    nameSource: prev || undefined,
+    idSource: prev || undefined,
+    outputFallback: prev || null,
+    preserveOutputFallback: true
+  });
+  if (prev && prev.biomeProject) {
+    g.biomeProject = cloneBiomeProject(prev.biomeProject);
   }
   return g;
 }
 
 /**
  * @param {import("./types.js").NoiseGraph} graph
+ * @param {string} [graphEditTarget] "main" | "placement" | "biome:<id>"
  * @returns {{ nodes: import("@xyflow/react").Node[], edges: import("@xyflow/react").Edge[] }}
  */
-export function graphToFlow(graph) {
+export function graphToFlow(graph, graphEditTarget) {
+  const t = graphEditTarget || "main";
+  let sub = graph;
+  if (t === "main") {
+    return noiseGraphToFlow(graph);
+  }
+  if (!graph.biomeProject) {
+    return noiseGraphToFlow(graph);
+  }
+  if (t === "placement") {
+    sub = graph.biomeProject.placementGraph;
+  } else if (t.startsWith("biome:")) {
+    const id = t.slice(6);
+    const b = graph.biomeProject.biomes.find((x) => x.id === id);
+    sub = b ? b.terrainGraph : graph;
+  }
+  return noiseGraphToFlow(sub);
+}
+
+/**
+ * @param {import("./types.js").NoiseGraph} graph
+ * @returns {{ nodes: import("@xyflow/react").Node[], edges: import("@xyflow/react").Edge[] }}
+ */
+function noiseGraphToFlow(graph) {
   const nodes = graph.nodes.map((n) => {
     const def = reg.get(n.typeId);
     return {

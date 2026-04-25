@@ -70,6 +70,8 @@ function terrainSignatureCore(s, graph, o) {
     s.graphKey,
     s.graphRevision,
     graphEvalPart(graph, s.graphRevision),
+    s.useBiomes ? 1 : 0,
+    s.terrainVizMode || "default",
     s.rendererViewMode,
     s.chunkViewSize | 0,
     s.chunkRadius,
@@ -150,6 +152,7 @@ export function terrainMeshBakeSignature(s, graph) {
 export function terrainGraphCompileSignature(s, graph) {
   return [
     s.useGraph ? 1 : 0,
+    s.useBiomes ? 1 : 0,
     s.graphKey | 0,
     s.graphTopologyRevision | 0,
     s.graphTopologyHash || graphTopologyPart(graph, s.graphRevision)
@@ -167,6 +170,8 @@ export function terrainChunkContentSignature(s, graph) {
   const off = s.offset;
   return [
     s.useGraph ? 1 : 0,
+    s.useBiomes ? 1 : 0,
+    s.terrainVizMode || "default",
     s.graphKey | 0,
     s.graphRevision | 0,
     s.graphParamRevision | 0,

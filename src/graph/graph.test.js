@@ -11,7 +11,11 @@ import {
   graphParamSignature,
   graphTopologySignature
 } from "./evalSignature.js";
+import { createDefaultState } from "../noise/defaults.js";
 import { buildHeightShaderWgsl } from "../gpu/graphCompilerWgsl.js";
+import { flowToGraph, graphToFlow } from "./flowAdapters.js";
+import { sampleBiomeProjectTerrain } from "../render/terrain/BiomeEvaluator.js";
+import { buildBiomeTerrainComputeWgsl, fillBiomeUniformBuffer, padThreeBiomes } from "../gpu/buildBiomeTerrainComputeWgsl.js";
 
 describe("graph", () => {
   const reg = createBuiltinRegistry();
@@ -75,5 +79,45 @@ describe("graph", () => {
     expect(b.ok).toBe(true);
     expect(a.fullWgsl).toBe(b.fullWgsl);
     expect(a.paramSlots).toEqual(b.paramSlots);
+  });
+
+  it("roundtrips flow adapters for main, placement, and biome terrain", () => {
+    const g = createDefaultGraph();
+    expect(g.biomeProject).toBeTruthy();
+    const a1 = graphToFlow(g, "main");
+    const b1 = flowToGraph(a1.nodes, a1.edges, g, "main");
+    expect(b1.nodes.length).toBe(g.nodes.length);
+    expect(b1.biomeProject?.biomes.length).toBe(g.biomeProject?.biomes.length);
+    const a2 = graphToFlow(g, "placement");
+    const b2 = flowToGraph(a2.nodes, a2.edges, g, "placement");
+    expect(b2.biomeProject?.placementGraph.nodes.length).toBe(g.biomeProject.placementGraph.nodes.length);
+    const b0 = g.biomeProject.biomes[0];
+    const a3 = graphToFlow(g, `biome:${b0.id}`);
+    const b3 = flowToGraph(a3.nodes, a3.edges, g, `biome:${b0.id}`);
+    expect(b3.biomeProject?.biomes[0].terrainGraph.nodes.length).toBe(b0.terrainGraph.nodes.length);
+  });
+
+  it("includes biome project in eval signature (contrast)", () => {
+    const g = createDefaultGraph();
+    const e0 = graphEvalSignature(g);
+    if (!g.biomeProject) {
+      return;
+    }
+    g.biomeProject.contrast = (g.biomeProject.contrast || 1) + 0.25;
+    expect(graphEvalSignature(g)).not.toBe(e0);
+  });
+
+  it("biome CPU sample is finite and biome WGSL compiles", () => {
+    const g = createDefaultGraph();
+    expect(g.biomeProject).toBeTruthy();
+    const st = { ...createDefaultState(), useBiomes: true, terrainVizMode: "default" };
+    const s = sampleBiomeProjectTerrain(0.1, 0.2, st, 0, g, g.biomeProject, undefined);
+    expect(Number.isFinite(s.height)).toBe(true);
+    const c = buildBiomeTerrainComputeWgsl(g.biomeProject, reg);
+    expect(c.ok).toBe(true);
+    const f = new Float32Array(32);
+    fillBiomeUniformBuffer(f, g.biomeProject);
+    expect(f[0]).toBe(g.biomeProject.placementScale);
+    expect(padThreeBiomes(g.biomeProject.biomes).length).toBe(3);
   });
 });

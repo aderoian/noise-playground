@@ -47,6 +47,50 @@ export const PinKind = {
  */
 
 /**
+ * @typedef {"indexed" | "weighted"} BiomeSelectionMode
+ */
+
+/**
+ * @typedef {object} BiomeDef
+ * @property {string} id Stable id (do not tie to display name)
+ * @property {string} name
+ * @property {string} colorHex e.g. #5BA85B
+ * @property {number} heightScale
+ * @property {number} heightOffset
+ * @property {number} weight Used in weighted mode (sum need not be 1; normalized at eval)
+ * @property {number} rangeStart Indexed mode 0..1
+ * @property {number} rangeEnd Indexed mode 0..1
+ * @property {number} blendHardness Per-biome edge sharpness factor
+ * @property {NoiseGraph} terrainGraph
+ */
+
+/**
+ * @typedef {object} BiomeProject
+ * @property {number} globalSeed
+ * @property {BiomeSelectionMode} selectionMode
+ * @property {number} blendWidth How far (0..1 placement space) transitions blend
+ * @property {number} blendHardness Global curve sharpness
+ * @property {number} placementScale World XY scale for placement sampling
+ * @property {number} placementSeed Added to eval context seed for placement graph
+ * @property {number} contrast Placement value contrast (post-normalize)
+ * @property {string} outputMode Preset label for UI: height | color | blended | debug
+ * @property {NoiseGraph} placementGraph
+ * @property {BiomeDef[]} biomes
+ */
+
+/**
+ * @typedef {object} TerrainSample
+ * @property {number} height World Z after mesh scaling
+ * @property {number} colorR
+ * @property {number} colorG
+ * @property {number} colorB
+ * @property {number} biomeId Index of dominant biome, or -1
+ * @property {Float32Array | number[]} biomeWeights Length = biomes.length
+ * @property {number} placementRaw Raw placement before normalize (debug)
+ * @property {number} placementU Placement in 0..1 (debug)
+ */
+
+/**
  * @typedef {object} NoiseGraph
  * @property {string} id
  * @property {string} name
@@ -54,6 +98,7 @@ export const PinKind = {
  * @property {GraphNode[]} nodes
  * @property {GraphLink[]} links
  * @property {string} [outputNodeId]
+ * @property {BiomeProject} [biomeProject] Optional biomes + placement; main nodes may still define classic scalar output when useBiomes is off
  */
 
 /**
@@ -101,4 +146,4 @@ export const PinKind = {
  * @property {string} [linkId]
  */
 
-export const ASSET_VERSION = 2;
+export const ASSET_VERSION = 3;

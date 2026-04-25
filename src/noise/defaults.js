@@ -110,6 +110,18 @@ export function createDefaultState() {
     meshWireframe: false,
     /** When true, height comes from the CPU-baked node graph (see noiseGraph) */
     useGraph: true,
+    /**
+     * When true (and useGraph), terrain uses graph.biomeProject: placement + per-biome terrain blending.
+     * When false, classic scalar `output` node on the main graph.
+     */
+    useBiomes: true,
+    /**
+     * default | height | color | blend | placement | biomeId | weight | biomePreview
+     * Final shading mode for chunked terrain
+     */
+    terrainVizMode: "default",
+    /** 0..n-1 when terrainVizMode is biomePreview */
+    biomePreviewIndex: 0,
     /** Baked field resolution for graph preview */
     graphBakeW: 128,
     graphBakeH: 128,
@@ -138,6 +150,11 @@ export function createDefaultState() {
      * @type {number}
      */
     graphKey: 0,
+    /**
+     * Which subgraph the graph editor is editing: "main" | "placement" | "biome:<id>"
+     * @type {string}
+     */
+    graphEditTarget: "main",
     // --- Chunked terrain + view modes (renderer overhaul) ---
     /** "chunk" = fixed grid snapshot + zoom; "world" = streaming + free-fly */
     rendererViewMode: "chunk",

@@ -60,6 +60,7 @@ export function mountGraphApp(el, getState, api) {
     api.applyPatch({
       noiseGraph: g,
       graphKey: nextKey,
+      graphEditTarget: "main",
       graphRevision: (st.graphRevision | 0) + 1,
       graphTopologyRevision: (st.graphTopologyRevision | 0) + 1,
       graphParamRevision: (st.graphParamRevision | 0) + 1,
@@ -73,8 +74,10 @@ export function mountGraphApp(el, getState, api) {
       const st = getState();
       root.render(
         <GraphEditor
-          key={st.graphKey ?? 0}
+          key={`${st.graphKey ?? 0}-${st.graphEditTarget || "main"}`}
           initialGraph={st.noiseGraph}
+          graphEditTarget={st.graphEditTarget || "main"}
+          onGraphEditTargetChange={(t) => api.applyPatch({ graphEditTarget: t })}
           onGraphChange={onG}
           onGraphFileLoaded={onFile}
         />

@@ -143,6 +143,42 @@
               <option value="cpu">CPU fallback</option>
             </select>
           </label>
+          <h3 class="render-panel__subtitle">Biome terrain</h3>
+          <label class="render-panel__row" title="When on, use graph.biomeProject (placement + per-biome terrain)">
+            <span class="render-panel__label">Use biomes</span>
+            <input
+              type="checkbox"
+              id="render-use-biomes"
+              class="control-checkbox"
+              checked
+            />
+            <span class="render-panel__label-sub">on</span>
+          </label>
+          <label class="render-panel__row" title="Shading / debug for chunked terrain (CPU and WebGPU)">
+            <span class="render-panel__label">Terrain view</span>
+            <select id="render-terrain-viz" class="control-select" aria-label="Terrain visualization mode">
+              <option value="default">Default (lit + ramp)</option>
+              <option value="height">Height (ramp)</option>
+              <option value="color">Biome color</option>
+              <option value="blend">Blend / weights</option>
+              <option value="placement">Placement raw</option>
+              <option value="biomeId">Biome id</option>
+              <option value="weight">Weight strip</option>
+              <option value="biomePreview">Single biome</option>
+            </select>
+          </label>
+          <label class="render-panel__row" id="render-biome-preview-row" title="Index into biome list (biomePreview mode)">
+            <span class="render-panel__label">Preview index</span>
+            <input
+              id="render-biome-preview"
+              class="control-number"
+              type="number"
+              min="0"
+              max="5"
+              step="1"
+              value="0"
+            />
+          </label>
           <div class="render-panel__row">
             <button type="button" id="render-reset" class="control-button">
               Reset view &amp; terrain

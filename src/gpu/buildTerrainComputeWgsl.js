@@ -23,7 +23,7 @@ struct ChunkU {
   segments: u32,
 };
 @group(1) @binding(0) var<uniform> g_chunk: ChunkU;
-@group(1) @binding(1) var<storage, read_write> g_heights: array<f32>;
+@group(1) @binding(1) var<storage, read_write> g_terrain: array<vec4<f32>>;
 
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -35,7 +35,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let wx = g_chunk.origin_x + (f32(gid.x) / denom) * g_chunk.world_size;
   let wy = g_chunk.origin_y + (f32(gid.y) / denom) * g_chunk.world_size;
   let idx = gid.y * sample_w + gid.x;
-  g_heights[idx] = eval_graph_height(wx, wy);
+  let h = eval_graph_height(wx, wy);
+  g_terrain[idx] = vec4f(0.0, 0.0, 0.0, h);
 }
 `;
   return {

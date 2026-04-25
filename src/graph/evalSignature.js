@@ -57,11 +57,12 @@ function sortedGraphLinks(g) {
  * @param {import("./types.js").NoiseGraph} g
  * @returns {string}
  */
-export function graphTopologySignature(g) {
+/**
+ * @param {import("./types.js").NoiseGraph} g
+ * @returns {string}
+ */
+function graphTopologyTree(g) {
   return JSON.stringify({
-    id: g.id,
-    version: g.version,
-    outputNodeId: g.outputNodeId,
     nodes: sortedGraphNodes(g).map((n) => ({
       id: n.id,
       typeId: n.typeId,
@@ -77,18 +78,122 @@ export function graphTopologySignature(g) {
 }
 
 /**
+ * @param {import("./types.js").BiomeProject} bp
+ * @returns {string}
+ */
+function biomeProjectTopologySignature(bp) {
+  const t = [graphTopologyTree(bp.placementGraph)];
+  for (const b of [...bp.biomes].sort((a, x) => a.id.localeCompare(x.id))) {
+    t.push(b.id, graphTopologyTree(b.terrainGraph));
+  }
+  return t.join("#");
+}
+
+export function graphTopologySignature(g) {
+  return JSON.stringify({
+    id: g.id,
+    version: g.version,
+    outputNodeId: g.outputNodeId,
+    nodes: sortedGraphNodes(g).map((n) => ({
+      id: n.id,
+      typeId: n.typeId,
+      compileParams: compileTimeParamsForNode(n),
+      isUnknown: n.isUnknown
+    })),
+    links: sortedGraphLinks(g).map((l) => ({
+      id: l.id,
+      from: l.from,
+      to: l.to
+    })),
+    biomeTopology: g.biomeProject ? biomeProjectTopologySignature(g.biomeProject) : ""
+  });
+}
+
+/**
  * Fingerprint of graph runtime-editable scalar/vector values that should update uniforms or storage
  * without forcing shader regeneration when topology is unchanged.
  * @param {import("./types.js").NoiseGraph} g
  * @returns {string}
  */
-export function graphParamSignature(g) {
-  return JSON.stringify({
+/**
+ * @param {import("./types.js").NoiseGraph} g
+ * @returns {string}
+ */
+function graphParamTree(g) {
+  return {
     nodes: sortedGraphNodes(g).map((n) => ({
       id: n.id,
       params: sortObject(n.params),
       pinDefaults: sortObject(n.pinDefaults)
     }))
+  };
+}
+
+/**
+ * @param {import("./types.js").BiomeProject} bp
+ */
+function biomeProjectParamSignature(bp) {
+  return {
+    p: graphParamTree(bp.placementGraph),
+    biomes: [...bp.biomes]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((b) => ({ id: b.id, t: graphParamTree(b.terrainGraph) }))
+  };
+}
+
+export function graphParamSignature(g) {
+  return JSON.stringify({
+    ...graphParamTree(g),
+    biome: g.biomeProject ? biomeProjectParamSignature(g.biomeProject) : null
+  });
+}
+
+/**
+ * @param {import("./types.js").BiomeProject} bp
+ * @returns {string}
+ */
+function biomeProjectEvalSignature(bp) {
+  const b = [];
+  b.push(graphEvalSignatureForNested(bp.placementGraph));
+  b.push(
+    String(bp.globalSeed),
+    bp.selectionMode,
+    bp.blendWidth,
+    bp.blendHardness,
+    bp.placementScale,
+    bp.placementSeed,
+    bp.contrast,
+    bp.outputMode
+  );
+  for (const bio of [...bp.biomes].sort((a, b) => a.id.localeCompare(b.id))) {
+    b.push(
+      bio.id,
+      bio.name,
+      bio.colorHex,
+      bio.heightScale,
+      bio.heightOffset,
+      bio.weight,
+      bio.rangeStart,
+      bio.rangeEnd,
+      bio.blendHardness,
+      graphEvalSignatureForNested(bio.terrainGraph)
+    );
+  }
+  return b.join("|");
+}
+
+/**
+ * Same as graph eval payload but for nested terrain/placement (no further biomeProject recursion in signature).
+ * @param {import("./types.js").NoiseGraph} g
+ * @returns {string}
+ */
+function graphEvalSignatureForNested(g) {
+  return JSON.stringify({
+    id: g.id,
+    version: g.version,
+    outputNodeId: g.outputNodeId,
+    topology: JSON.parse(graphTopologySignature(g)),
+    runtime: JSON.parse(graphParamSignature(g))
   });
 }
 
@@ -103,6 +208,7 @@ export function graphEvalSignature(g) {
     version: g.version,
     outputNodeId: g.outputNodeId,
     topology: JSON.parse(graphTopologySignature(g)),
-    runtime: JSON.parse(graphParamSignature(g))
+    runtime: JSON.parse(graphParamSignature(g)),
+    biomeProject: g.biomeProject ? biomeProjectEvalSignature(g.biomeProject) : ""
   });
 }

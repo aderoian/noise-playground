@@ -589,6 +589,93 @@ body.app-graph-minimized #split-graph-view {
   min-height: 0;
   font-size: 0.8rem;
 }
+.graph-editor__biome {
+  flex: 0 0 auto;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(13, 17, 23, 0.85);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.graph-editor__biome-tgt .graph-editor__biome-lab {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.graph-editor__biome-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+}
+.graph-editor__biome-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.graph-editor__biome-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.35rem;
+}
+.graph-editor__biome-name {
+  min-width: 5rem;
+  max-width: 8rem;
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.25rem;
+  background: #0d1117;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+}
+.graph-editor__biome-color {
+  width: 1.4rem;
+  height: 1.25rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.graph-editor__biome-proj {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  align-items: flex-end;
+  padding-top: 0.2rem;
+  border-top: 1px solid var(--border);
+}
+.graph-editor__biome-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+.graph-editor__biome-field input,
+.graph-editor__biome-field select {
+  font: inherit;
+  font-size: 0.75rem;
+  min-width: 3.2rem;
+  max-width: 5.5rem;
+  padding: 0.1rem 0.2rem;
+  background: #0d1117;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text);
+}
+.btn--on {
+  background: #238636;
+  border-color: #3fb950;
+  color: #fff;
+}
+.btn--sm {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.35rem;
+}
 .graph-editor__bar {
   display: flex;
   flex-wrap: wrap;

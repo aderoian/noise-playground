@@ -97,6 +97,11 @@ if (
   throw new Error("Missing render panel or viewport UI in DOM");
 }
 
+const renderUseBiomes = el("render-use-biomes");
+const renderTerrainViz = el("render-terrain-viz");
+const renderBiomePreview = el("render-biome-preview");
+const renderBiomePreviewRow = el("render-biome-preview-row");
+
 const MOVEMENT = new Set([
   "KeyW",
   "KeyA",
@@ -211,6 +216,18 @@ function syncRenderPanelFromState() {
   /** @type {HTMLInputElement} */ (debugDirty).checked = state.debugShowDirtyChunks;
   /** @type {HTMLInputElement} */ (debugLod).checked = state.debugColorByLod;
   /** @type {HTMLInputElement} */ (debugShaderPreview).checked = state.debugShowShaderPreview;
+  if (renderUseBiomes) {
+    renderUseBiomes.checked = state.useBiomes;
+  }
+  if (renderTerrainViz) {
+    renderTerrainViz.value = state.terrainVizMode;
+  }
+  if (renderBiomePreview) {
+    renderBiomePreview.value = String(state.biomePreviewIndex | 0);
+  }
+  if (renderBiomePreviewRow) {
+    renderBiomePreviewRow.style.display = state.terrainVizMode === "biomePreview" ? "" : "none";
+  }
 }
 
 function syncViewModeButtons() {
@@ -314,6 +331,23 @@ bindRangeNumberPair(
     applyRenderPatch({ terrainBackend: v });
   }
 });
+if (renderUseBiomes) {
+  renderUseBiomes.addEventListener("change", (e) => {
+    applyRenderPatch({ useBiomes: /** @type {HTMLInputElement} */ (e.target).checked });
+  });
+}
+if (renderTerrainViz) {
+  renderTerrainViz.addEventListener("change", (e) => {
+    const v = /** @type {HTMLSelectElement} */ (e.target).value;
+    applyRenderPatch({ terrainVizMode: v, biomePreviewIndex: state.biomePreviewIndex | 0 });
+  });
+}
+if (renderBiomePreview) {
+  renderBiomePreview.addEventListener("change", (e) => {
+    const n = Math.max(0, Math.floor(Number(/** @type {HTMLInputElement} */ (e.target).value) || 0));
+    applyRenderPatch({ biomePreviewIndex: n });
+  });
+}
 /** @type {HTMLSelectElement} */ (renderPreset).addEventListener("change", (e) => {
   const v = /** @type {HTMLSelectElement} */ (e.target).value;
   applyRenderPatch({ renderPreset: v });

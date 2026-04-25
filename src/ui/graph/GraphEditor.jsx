@@ -18,6 +18,14 @@ import { validateGraph } from "../../graph/validate.js";
 import { saveGraphToJson, loadGraphFromJson } from "../../graph/serialize.js";
 import { createDefaultGraph } from "../../graph/defaultGraph.js";
 import { defaultPinDefaultsFromTypeDef } from "../../graph/model.js";
+import {
+  addBiomeToGraph,
+  duplicateBiomeInGraph,
+  moveBiomeInGraph,
+  patchBiomeDef,
+  patchBiomeProject,
+  removeBiomeFromGraph
+} from "../../graph/biomeProject.js";
 
 const nodeTypes = { noise: NoiseNode };
 
@@ -160,14 +168,17 @@ function GraphContextMenuEdge({ edge, nodes, onRemove }) {
  * @param {import("../../graph/types.js").NoiseGraph} props.initialGraph
  * @param {(g: import("../../graph/types.js").NoiseGraph) => void} props.onGraphChange
  * @param {(g: import("../../graph/types.js").NoiseGraph) => void} [props.onGraphFileLoaded] remounts editor when a file is loaded
+ * @param {string} [props.graphEditTarget] "main" | "placement" | "biome:<id>"
+ * @param {(t: string) => void} [props.onGraphEditTargetChange]
  */
-export function GraphEditor({ initialGraph, onGraphChange, onGraphFileLoaded }) {
+export function GraphEditor({ initialGraph, onGraphChange, onGraphFileLoaded, graphEditTarget, onGraphEditTargetChange }) {
+  const _target = graphEditTarget || "main";
   const registry = useMemo(() => createBuiltinRegistry(), []);
   const boot = useMemo(
     () => initialGraph || createDefaultGraph(),
     [initialGraph]
   );
-  const flow0 = useMemo(() => graphToFlow(boot), [boot]);
+  const flow0 = useMemo(() => graphToFlow(boot, _target), [boot, _target]);
   const init = useRef(/** @type {import("../../graph/types.js").NoiseGraph | null} */ (null));
   if (init.current === null) {
     init.current = boot;
@@ -213,16 +224,16 @@ export function GraphEditor({ initialGraph, onGraphChange, onGraphFileLoaded }) 
   );
 
   const issues = useMemo(
-    () => validateGraph(flowToGraph(nodes, edges, null), registry),
-    [nodes, edges, registry]
+    () => validateGraph(flowToGraph(nodes, edges, null, _target), registry),
+    [nodes, edges, registry, _target]
   );
   const errCount = issues.filter((i) => i.level === "error").length;
 
   useEffect(() => {
-    const g = flowToGraph(nodes, edges, outRef.current || init.current);
+    const g = flowToGraph(nodes, edges, outRef.current || init.current, _target);
     outRef.current = g;
     onGraphChange(g);
-  }, [nodes, edges, onGraphChange]);
+  }, [nodes, edges, onGraphChange, _target]);
 
   const onConnect = useCallback(
     (c) => {
@@ -394,15 +405,232 @@ export function GraphEditor({ initialGraph, onGraphChange, onGraphFileLoaded }) 
     [setPin, setParam]
   );
 
+  const bp = boot && boot.biomeProject;
+  const remountWithGraph = useCallback(
+    (g) => {
+      if (onGraphFileLoaded) {
+        onGraphFileLoaded(g);
+      } else {
+        onGraphChange(g);
+      }
+    },
+    [onGraphFileLoaded, onGraphChange]
+  );
+  const pushProjectPatch = useCallback(
+    (patch) => {
+      const g = patchBiomeProject(outRef.current || init.current, patch);
+      outRef.current = g;
+      onGraphChange(g);
+    },
+    [onGraphChange]
+  );
+
   const canDeleteNode = selection.nodeIds.length > 0;
   const canDeleteEdge = selection.edgeIds.length > 0;
 
   const contextMenuNode =
     ctxMenu && ctxMenu.kind === "node" ? nodes.find((n) => n.id === ctxMenu.nodeId) ?? null : null;
 
+  const targetLabel =
+    _target === "main"
+      ? "Main graph (scalar + connections)"
+      : _target === "placement"
+        ? "Placement (biome weight driver)"
+        : `Biome terrain (${_target.slice(6)})`;
+
   return (
     <GraphActionsCtx.Provider value={act}>
       <div className="graph-editor">
+        {bp && (
+          <div className="graph-editor__biome" aria-label="Biome system">
+            <div className="graph-editor__biome-row graph-editor__biome-tgt">
+              <span className="graph-editor__biome-lab" title="Which subgraph the canvas below edits">
+                {targetLabel}
+              </span>
+            </div>
+            <div className="graph-editor__biome-row">
+              <button
+                type="button"
+                className={_target === "main" ? "btn btn--on" : "btn"}
+                onClick={() => onGraphEditTargetChange && onGraphEditTargetChange("main")}
+              >
+                Main
+              </button>
+              <button
+                type="button"
+                className={_target === "placement" ? "btn btn--on" : "btn"}
+                onClick={() => onGraphEditTargetChange && onGraphEditTargetChange("placement")}
+              >
+                Placement
+              </button>
+            </div>
+            <div className="graph-editor__biome-list">
+              {(bp.biomes || []).map((b, ix) => (
+                <div key={b.id} className="graph-editor__biome-item">
+                  <input
+                    className="graph-editor__biome-name"
+                    type="text"
+                    value={b.name}
+                    title="Biome name"
+                    onChange={(e) => {
+                      const g0 = outRef.current || init.current;
+                      const g1 = patchBiomeDef(g0, b.id, { name: e.target.value });
+                      outRef.current = g1;
+                      onGraphChange(g1);
+                    }}
+                  />
+                  <input
+                    className="graph-editor__biome-color"
+                    type="color"
+                    value={b.colorHex}
+                    title="Display color"
+                    onChange={(e) => {
+                      const g0 = outRef.current || init.current;
+                      const g1 = patchBiomeDef(g0, b.id, { colorHex: e.target.value });
+                      outRef.current = g1;
+                      onGraphChange(g1);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className={_target === `biome:${b.id}` ? "btn btn--on btn--sm" : "btn btn--sm"}
+                    onClick={() => onGraphEditTargetChange && onGraphEditTargetChange(`biome:${b.id}`)}
+                  >
+                    Edit terrain
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    title="Move up"
+                    onClick={() => {
+                      if (ix <= 0) {
+                        return;
+                      }
+                      const g0 = outRef.current || init.current;
+                      remountWithGraph(moveBiomeInGraph(g0, ix, ix - 1));
+                    }}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    title="Move down"
+                    onClick={() => {
+                      if (ix >= (bp.biomes || []).length - 1) {
+                        return;
+                      }
+                      const g0 = outRef.current || init.current;
+                      remountWithGraph(moveBiomeInGraph(g0, ix, ix + 1));
+                    }}
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    onClick={() => {
+                      const g0 = outRef.current || init.current;
+                      remountWithGraph(duplicateBiomeInGraph(g0, b.id));
+                    }}
+                  >
+                    dup
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    onClick={() => {
+                      const g0 = outRef.current || init.current;
+                      if (_target === `biome:${b.id}` && onGraphEditTargetChange) {
+                        onGraphEditTargetChange("main");
+                      }
+                      remountWithGraph(removeBiomeFromGraph(g0, b.id));
+                    }}
+                  >
+                    del
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="graph-editor__biome-row">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  const g0 = outRef.current || init.current;
+                  remountWithGraph(addBiomeToGraph(g0));
+                }}
+              >
+                + Biome
+              </button>
+            </div>
+            <div className="graph-editor__biome-proj" role="group" aria-label="Biome project parameters">
+              <label className="graph-editor__biome-field">
+                <span>Mode</span>
+                <select
+                  value={bp.selectionMode}
+                  onChange={(e) =>
+                    pushProjectPatch({ selectionMode: e.target.value === "indexed" ? "indexed" : "weighted" })
+                  }
+                >
+                  <option value="indexed">Indexed ranges</option>
+                  <option value="weighted">Weighted</option>
+                </select>
+              </label>
+              <label className="graph-editor__biome-field">
+                <span>Blend w</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="0.5"
+                  value={bp.blendWidth}
+                  onChange={(e) => pushProjectPatch({ blendWidth: Number(e.target.value) || 0 })}
+                />
+              </label>
+              <label className="graph-editor__biome-field">
+                <span>Contrast</span>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0.1"
+                  max="8"
+                  value={bp.contrast}
+                  onChange={(e) => pushProjectPatch({ contrast: Number(e.target.value) || 1 })}
+                />
+              </label>
+              <label className="graph-editor__biome-field">
+                <span>Pl. scale</span>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0.01"
+                  max="4"
+                  value={bp.placementScale}
+                  onChange={(e) => pushProjectPatch({ placementScale: Number(e.target.value) || 0.5 })}
+                />
+              </label>
+              <label className="graph-editor__biome-field">
+                <span>Pl. seed</span>
+                <input
+                  type="number"
+                  step="1"
+                  value={bp.placementSeed}
+                  onChange={(e) => pushProjectPatch({ placementSeed: Number(e.target.value) || 0 })}
+                />
+              </label>
+              <label className="graph-editor__biome-field">
+                <span>Global</span>
+                <input
+                  type="number"
+                  step="1"
+                  value={bp.globalSeed}
+                  onChange={(e) => pushProjectPatch({ globalSeed: Number(e.target.value) || 0 })}
+                />
+              </label>
+            </div>
+          </div>
+        )}
         <div className="graph-editor__bar">
           <div className="graph-editor__add">
             <span className="graph-editor__add-label">Add</span>
@@ -479,7 +707,7 @@ export function GraphEditor({ initialGraph, onGraphChange, onGraphFileLoaded }) 
               type="button"
               className="btn"
               onClick={() => {
-                const g0 = flowToGraph(nodes, edges, boot);
+                const g0 = flowToGraph(nodes, edges, outRef.current || init.current || boot, _target);
                 const s = saveGraphToJson(g0);
                 const blob = new Blob([s], { type: "application/json" });
                 const a = document.createElement("a");
@@ -499,7 +727,7 @@ export function GraphEditor({ initialGraph, onGraphChange, onGraphFileLoaded }) 
                   if (onGraphFileLoaded) {
                     onGraphFileLoaded(graph);
                   } else {
-                    const { nodes: n, edges: ed } = graphToFlow(graph);
+                    const { nodes: n, edges: ed } = graphToFlow(graph, "main");
                     setNodes(n);
                     setEdges(ed);
                     onGraphChange(graph);

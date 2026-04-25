@@ -531,12 +531,24 @@ export function compileGraphHeightBody(graph, registry) {
 /**
  * @param {import("../graph/types.js").NoiseGraph} graph
  * @param {import("../graph/registry.js").NodeRegistry} registry
+ * @param {object} [opts]
+ * @param {string} [opts.fnName] default eval_graph_height
+ * @param {string} [opts.paramName] default g_params
+ * @param {boolean} [opts.returnMeshScaled] default true: apply amp_mesh+height_off
  */
-export function buildHeightShaderWgsl(graph, registry) {
+export function buildHeightShaderWgsl(graph, registry, opts) {
+  const fnName = (opts && opts.fnName) || "eval_graph_height";
+  const paramName = (opts && opts.paramName) || "g_params";
+  const returnMeshScaled = !opts || opts.returnMeshScaled !== false;
   const c = compileGraphHeightBody(graph, registry);
   if (!c.ok) {
     return { ok: false, fullWgsl: "", paramCount: 0, errors: c.errors, paramSlots: c.paramSlots };
   }
+  const wgslStripped = c.wgslBody.replaceAll("g_params", paramName);
+  const outExpr = String(c.outputExpr).replaceAll("g_params", paramName);
+  const returnStmt = returnMeshScaled
+    ? "  return raw * g_global.amp_mesh + g_global.height_off;"
+    : "  return raw;";
   const struct = `
 struct GlobalU {
   ctx_time: f32,
@@ -556,24 +568,75 @@ struct ParamsU {
   values: array<f32, ${MAX_PARAMS}>,
 };
 @group(0) @binding(0) var<uniform> g_global: GlobalU;
-@group(0) @binding(1) var<uniform> g_params: ParamsU;
+@group(0) @binding(1) var<uniform> ${paramName}: ParamsU;
 `;
-  const fn = `
-fn eval_graph_height(world_x: f32, world_y: f32) -> f32 {
+  const fnBody = `
+fn ${fnName}(world_x: f32, world_y: f32) -> f32 {
   let ctx_x = world_x + g_global.off_x;
   let ctx_y = world_y + g_global.off_y;
   let ctx_z = g_global.slice_z + select(0.0, g_global.ctx_time * g_global.time_speed, g_global.animate > 0.5) + g_global.off_z;
   let ctx_time = select(0.0, g_global.ctx_time * g_global.time_speed, g_global.animate > 0.5);
   let ctx_seed = g_global.ctx_seed;
-${c.wgslBody.split("\n").map((l) => (l ? "  " + l : "")).join("\n")}
-  let raw = ${c.outputExpr};
-  return raw * g_global.amp_mesh + g_global.height_off;
+${wgslStripped.split("\n").map((l) => (l ? "  " + l : "")).join("\n")}
+  let raw = ${outExpr};
+${returnStmt}
 }
 `;
-  const full = `${WGSL_NOISE_LIB}\n${struct}\n${fn}\n`;
+  const full = `${WGSL_NOISE_LIB}\n${struct}\n${fnBody}\n`;
   return {
     ok: c.ok,
     fullWgsl: full,
+    paramCount: c.paramCount,
+    errors: c.errors,
+    paramSlots: c.paramSlots
+  };
+}
+
+/**
+ * Function body + param slots only (for stitching multi-graph shaders). Reuses one GlobalU/Params type at link time.
+ * @param {import("../graph/types.js").NoiseGraph} graph
+ * @param {import("../graph/registry.js").NodeRegistry} registry
+ * @param {object} opts
+ * @param {string} opts.fnName
+ * @param {string} opts.paramName
+ * @param {boolean} [opts.returnMeshScaled]
+ */
+export function buildHeightFunctionWgsl(graph, registry, opts) {
+  const fnName = opts.fnName;
+  const paramName = opts.paramName;
+  const returnMeshScaled = opts.returnMeshScaled !== false;
+  const placementMode = Boolean(opts.placementMode);
+  const c = compileGraphHeightBody(graph, registry);
+  if (!c.ok) {
+    return { ok: false, wgsl: "", paramCount: 0, errors: c.errors, paramSlots: c.paramSlots };
+  }
+  const wgslStripped = c.wgslBody.replaceAll("g_params", paramName);
+  const outExpr = String(c.outputExpr).replaceAll("g_params", paramName);
+  const returnStmt = returnMeshScaled
+    ? "  return raw * g_global.amp_mesh + g_global.height_off;"
+    : "  return raw;";
+  const ctxHead = placementMode
+    ? `  let ctx_x = (world_x + g_global.off_x) * g_biome[0];
+  let ctx_y = (world_y + g_global.off_y) * g_biome[0];
+  let ctx_z = g_global.slice_z + select(0.0, g_global.ctx_time * g_global.time_speed, g_global.animate > 0.5) + g_global.off_z;
+  let ctx_time = select(0.0, g_global.ctx_time * g_global.time_speed, g_global.animate > 0.5);
+  let ctx_seed = g_global.ctx_seed + g_biome[1] + g_biome[2] * 0.0001;`
+    : `  let ctx_x = world_x + g_global.off_x;
+  let ctx_y = world_y + g_global.off_y;
+  let ctx_z = g_global.slice_z + select(0.0, g_global.ctx_time * g_global.time_speed, g_global.animate > 0.5) + g_global.off_z;
+  let ctx_time = select(0.0, g_global.ctx_time * g_global.time_speed, g_global.animate > 0.5);
+  let ctx_seed = g_global.ctx_seed;`;
+  const wgsl = `
+fn ${fnName}(world_x: f32, world_y: f32) -> f32 {
+${ctxHead}
+${wgslStripped.split("\n").map((l) => (l ? "  " + l : "")).join("\n")}
+  let raw = ${outExpr};
+${returnStmt}
+}
+`;
+  return {
+    ok: c.ok,
+    wgsl,
     paramCount: c.paramCount,
     errors: c.errors,
     paramSlots: c.paramSlots

@@ -1,4 +1,5 @@
 import { Color, PerspectiveCamera, Vector3 } from "three";
+import { buildBiomeTerrainComputeWgsl, fillBiomeUniformBuffer, padThreeBiomes } from "../../gpu/buildBiomeTerrainComputeWgsl.js";
 import { buildTerrainComputeWgsl } from "../../gpu/buildTerrainComputeWgsl.js";
 import { fillGraphParamBufferFromSlots } from "../../gpu/graphCompilerWgsl.js";
 import { TERRAIN_RENDER_WGSL } from "../../gpu/terrainRenderWgsl.js";
@@ -20,6 +21,7 @@ import {
 const COMPUTE_GLOBAL_FLOATS = 12;
 const COMPUTE_GLOBAL_BYTES = COMPUTE_GLOBAL_FLOATS * 4;
 const COMPUTE_PARAM_BYTES = 384 * 4;
+const COMPUTE_BIOME_UNIFORM_BYTES = 8 * 16;
 const COMPUTE_CHUNK_BYTES = 32;
 const RENDER_FRAME_BYTES = 112;
 const RENDER_CHUNK_BYTES = 48;
@@ -72,7 +74,7 @@ struct ChunkU {
 @group(0) @binding(0) var<uniform> g_global: GlobalU;
 @group(0) @binding(1) var<uniform> g_params: ParamsU;
 @group(1) @binding(0) var<uniform> g_chunk: ChunkU;
-@group(1) @binding(1) var<storage, read_write> g_heights: array<f32>;
+@group(1) @binding(1) var<storage, read_write> g_terrain: array<vec4<f32>>;
 
 fn eval_graph_height(world_x: f32, world_y: f32) -> f32 {
   let wx = world_x + g_global.off_x;
@@ -91,7 +93,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let wx = g_chunk.origin_x + (f32(gid.x) / denom) * g_chunk.world_size;
   let wy = g_chunk.origin_y + (f32(gid.y) / denom) * g_chunk.world_size;
   let idx = gid.y * sample_w + gid.x;
-  g_heights[idx] = eval_graph_height(wx, wy);
+  g_terrain[idx] = vec4f(0.0, 0.0, 0.0, eval_graph_height(wx, wy));
 }
 `;
 }
@@ -174,6 +176,14 @@ export function createGpuRendererController(canvas, getState, getGraph) {
   /** @type {GPUBuffer | null} */
   let paramUniformBuffer = null;
   /** @type {GPUBuffer | null} */
+  let paramBiome0Buffer = null;
+  /** @type {GPUBuffer | null} */
+  let paramBiome1Buffer = null;
+  /** @type {GPUBuffer | null} */
+  let paramBiome2Buffer = null;
+  /** @type {GPUBuffer | null} */
+  let biomeUniformBuffer = null;
+  /** @type {GPUBuffer | null} */
   let computeChunkUniformBuffer = null;
   /** @type {GPUBuffer | null} */
   let renderFrameUniformBuffer = null;
@@ -187,6 +197,7 @@ export function createGpuRendererController(canvas, getState, getGraph) {
   let renderChunkBindGroupLayout = null;
   /** @type {Float32Array} */
   const paramScratch = new Float32Array(COMPUTE_PARAM_BYTES / 4);
+  const biomeScratch = new Float32Array(32);
 
   /** @type {Map<string, any>} */
   const compileCache = new Map();
@@ -234,6 +245,10 @@ export function createGpuRendererController(canvas, getState, getGraph) {
     presentationFormat = navigator.gpu.getPreferredCanvasFormat();
     globalUniformBuffer = makeBuffer(device, COMPUTE_GLOBAL_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, "global-uniform");
     paramUniformBuffer = makeBuffer(device, COMPUTE_PARAM_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, "graph-param-uniform");
+    paramBiome0Buffer = makeBuffer(device, COMPUTE_PARAM_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, "graph-param-b0");
+    paramBiome1Buffer = makeBuffer(device, COMPUTE_PARAM_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, "graph-param-b1");
+    paramBiome2Buffer = makeBuffer(device, COMPUTE_PARAM_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, "graph-param-b2");
+    biomeUniformBuffer = makeBuffer(device, COMPUTE_BIOME_UNIFORM_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, "biome-uniform");
     computeChunkUniformBuffer = makeBuffer(device, COMPUTE_CHUNK_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, "compute-chunk-uniform");
     renderFrameUniformBuffer = makeBuffer(device, RENDER_FRAME_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, "render-frame-uniform");
     renderChunkUniformBuffer = makeBuffer(device, RENDER_CHUNK_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, "render-chunk-uniform");
@@ -354,7 +369,7 @@ export function createGpuRendererController(canvas, getState, getGraph) {
     }
     return makeBuffer(
       device,
-      sampleCount * 4,
+      sampleCount * 16,
       GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
       `height-buffer-${sampleCount}`
     );
@@ -523,9 +538,27 @@ export function createGpuRendererController(canvas, getState, getGraph) {
     if (!device || !paramUniformBuffer || !activeRuntime || !graph || !st.useGraph) {
       return;
     }
-    paramScratch.fill(0);
-    fillGraphParamBufferFromSlots(paramScratch, graph, registry, activeRuntime.paramSlots || []);
-    device.queue.writeBuffer(paramUniformBuffer, 0, paramScratch);
+    if (activeRuntime.isBiome && graph.biomeProject && paramBiome0Buffer && paramBiome1Buffer && paramBiome2Buffer && biomeUniformBuffer) {
+      const bp = graph.biomeProject;
+      paramScratch.fill(0);
+      fillGraphParamBufferFromSlots(paramScratch, bp.placementGraph, registry, activeRuntime.paramSlotsPl || []);
+      device.queue.writeBuffer(paramUniformBuffer, 0, paramScratch);
+      const tri = padThreeBiomes(bp.biomes);
+      const slots = activeRuntime.paramSlotsBiomes || [];
+      /** @type {GPUBuffer[]} */
+      const bufs = [paramBiome0Buffer, paramBiome1Buffer, paramBiome2Buffer];
+      for (let i = 0; i < 3; i++) {
+        paramScratch.fill(0);
+        fillGraphParamBufferFromSlots(paramScratch, tri[i].terrainGraph, registry, slots[i] || []);
+        device.queue.writeBuffer(bufs[i], 0, paramScratch);
+      }
+      fillBiomeUniformBuffer(biomeScratch, bp);
+      device.queue.writeBuffer(biomeUniformBuffer, 0, biomeScratch);
+    } else {
+      paramScratch.fill(0);
+      fillGraphParamBufferFromSlots(paramScratch, graph, registry, activeRuntime.paramSlots || []);
+      device.queue.writeBuffer(paramUniformBuffer, 0, paramScratch);
+    }
     lastParamHash = st.graphParamHash || "";
   }
 
@@ -626,8 +659,8 @@ export function createGpuRendererController(canvas, getState, getGraph) {
     }
   }
 
-  async function compileRuntime(key, graph) {
-    if (!device || !globalUniformBuffer || !paramUniformBuffer) {
+  async function compileRuntime(key, st, graph) {
+    if (!device || !globalUniformBuffer || !paramUniformBuffer || !paramBiome0Buffer || !paramBiome1Buffer || !paramBiome2Buffer || !biomeUniformBuffer) {
       return false;
     }
     if (compileCache.has(key)) {
@@ -639,7 +672,42 @@ export function createGpuRendererController(canvas, getState, getGraph) {
       return true;
     }
     viewInfo.compileStatus = "compiling";
-    const built = graph ? buildTerrainComputeWgsl(graph, registry) : { ok: true, fullWgsl: createFlatComputeWgsl(), paramCount: 0, errors: [], paramSlots: [] };
+    const wantBiome =
+      !!(st && st.useBiomes) &&
+      graph &&
+      graph.biomeProject &&
+      graph.biomeProject.placementGraph &&
+      graph.biomeProject.biomes &&
+      graph.biomeProject.biomes.length > 0;
+    let built;
+    let isBiome = false;
+    if (st?.useGraph && wantBiome) {
+      const bTry = buildBiomeTerrainComputeWgsl(graph.biomeProject, registry);
+      if (bTry.ok) {
+        built = bTry;
+        isBiome = true;
+      } else if (graph) {
+        built = buildTerrainComputeWgsl(graph, registry);
+        if (!built.ok) {
+          viewInfo.compileErrors = (bTry.errors || [])
+            .concat(built.errors || [])
+            .map((e) => e.message)
+            .join(" | ");
+          viewInfo.compileStatus = "compile-error";
+          return false;
+        }
+        isBiome = false;
+      } else {
+        built = { ok: false, fullWgsl: "", errors: bTry.errors || [] };
+        viewInfo.compileErrors = built.errors.map((e) => e.message).join(" | ");
+        viewInfo.compileStatus = "compile-error";
+        return false;
+      }
+    } else if (st?.useGraph && graph) {
+      built = buildTerrainComputeWgsl(graph, registry);
+    } else {
+      built = { ok: true, fullWgsl: createFlatComputeWgsl(), paramCount: 0, errors: [], paramSlots: [] };
+    }
     if (!built.ok) {
       viewInfo.compileErrors = built.errors.map((e) => e.message).join(" | ");
       viewInfo.compileStatus = "compile-error";
@@ -658,17 +726,36 @@ export function createGpuRendererController(canvas, getState, getGraph) {
       layout: "auto",
       compute: { module, entryPoint: "main" }
     });
-    const computeBindGroup0 = device.createBindGroup({
-      layout: computePipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: globalUniformBuffer } },
-        { binding: 1, resource: { buffer: paramUniformBuffer } }
-      ]
-    });
+    /** @type {GPUBindGroup} */
+    let computeBindGroup0;
+    if (isBiome) {
+      computeBindGroup0 = device.createBindGroup({
+        layout: computePipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: { buffer: globalUniformBuffer } },
+          { binding: 1, resource: { buffer: paramUniformBuffer } },
+          { binding: 2, resource: { buffer: paramBiome0Buffer } },
+          { binding: 3, resource: { buffer: paramBiome1Buffer } },
+          { binding: 4, resource: { buffer: paramBiome2Buffer } },
+          { binding: 5, resource: { buffer: biomeUniformBuffer } }
+        ]
+      });
+    } else {
+      computeBindGroup0 = device.createBindGroup({
+        layout: computePipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: { buffer: globalUniformBuffer } },
+          { binding: 1, resource: { buffer: paramUniformBuffer } }
+        ]
+      });
+    }
     activeRuntime = {
       key,
+      isBiome,
       shaderSource: built.fullWgsl,
-      paramSlots: built.paramSlots,
+      paramSlots: isBiome ? [] : built.paramSlots || [],
+      paramSlotsPl: isBiome ? built.paramSlotsPl : undefined,
+      paramSlotsBiomes: isBiome ? built.paramSlotsBiomes : undefined,
       computePipeline,
       computeBindGroup0
     };
@@ -696,7 +783,7 @@ export function createGpuRendererController(canvas, getState, getGraph) {
     }
     const key = pendingCompileSig;
     pendingCompileSig = "";
-    compilePromise = compileRuntime(key, st.useGraph ? graph : null)
+    compilePromise = compileRuntime(key, st, st.useGraph ? graph : null)
       .then((ok) => {
         if (ok) {
           lastCompileSig = key;
@@ -855,6 +942,10 @@ export function createGpuRendererController(canvas, getState, getGraph) {
       }
       globalUniformBuffer?.destroy();
       paramUniformBuffer?.destroy();
+      paramBiome0Buffer?.destroy();
+      paramBiome1Buffer?.destroy();
+      paramBiome2Buffer?.destroy();
+      biomeUniformBuffer?.destroy();
       computeChunkUniformBuffer?.destroy();
       renderFrameUniformBuffer?.destroy();
       renderChunkUniformBuffer?.destroy();

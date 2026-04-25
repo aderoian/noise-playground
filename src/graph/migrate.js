@@ -7,10 +7,11 @@ import { ASSET_VERSION } from "./types.js";
 export function migrate(raw) {
   const warnings = [];
   if (!raw || typeof raw !== "object") {
-    return { data: { name: "Untitled", nodes: [], links: [] }, fromVersion: 0, warnings };
+    return { data: { name: "Untitled", nodes: [], links: [], version: ASSET_VERSION }, fromVersion: 0, warnings };
   }
   const o = /** @type {any} */ (raw);
-  let v = typeof o.version === "number" ? o.version : 0;
+  const fromVersionIn = typeof o.version === "number" ? o.version : 0;
+  let v = fromVersionIn;
   if (v < 0) {
     v = 0;
   }
@@ -29,18 +30,33 @@ export function migrate(raw) {
   }
 
   if (v < 1) {
-    data = { ...o, version: ASSET_VERSION, nodes: o.nodes || [], links: o.links || [] };
-    v = ASSET_VERSION;
+    data = { ...o, version: 1, nodes: o.nodes || [], links: o.links || [] };
+    v = 1;
   }
 
   if (v < 2) {
-    data = { ...data, version: ASSET_VERSION, nodes: data.nodes || [], links: data.links || [] };
-    v = ASSET_VERSION;
+    data = { ...data, version: 2, nodes: data.nodes || [], links: data.links || [] };
+    v = 2;
   }
 
-  if (v < ASSET_VERSION) {
-    warnings.push("Future: add step migrations for newer format");
+  if (v < 3) {
+    data = {
+      ...data,
+      version: 3,
+      nodes: data.nodes || [],
+      links: data.links || [],
+      biomeProject: data.biomeProject ?? null
+    };
+    v = 3;
+    if (fromVersionIn < 3) {
+      warnings.push("Migrated to v3 biome-capable format");
+    }
   }
 
-  return { data, fromVersion: v, warnings };
+  data = { ...data, version: ASSET_VERSION };
+  if (fromVersionIn < ASSET_VERSION) {
+    warnings.push(`Migrated from version ${fromVersionIn} to ${ASSET_VERSION}`);
+  }
+
+  return { data, fromVersion: fromVersionIn, warnings };
 }

@@ -25,7 +25,7 @@ struct ChunkU {
 
 @group(0) @binding(0) var<uniform> g_frame: FrameU;
 @group(1) @binding(0) var<uniform> g_chunk: ChunkU;
-@group(1) @binding(1) var<storage, read> g_heights: array<f32>;
+@group(1) @binding(1) var<storage, read> g_terrain: array<vec4<f32>>;
 
 struct VsIn {
   @location(0) uv: vec2<f32>,
@@ -38,6 +38,7 @@ struct VsOut {
   @location(2) uv: vec2<f32>,
   @location(3) debug_rgb: vec3<f32>,
   @location(4) dirty_flag: f32,
+  @location(5) v_albedo: vec3<f32>,
 };
 
 fn sample_idx(ix: i32, iy: i32, sample_w: i32) -> i32 {
@@ -47,7 +48,11 @@ fn sample_idx(ix: i32, iy: i32, sample_w: i32) -> i32 {
 }
 
 fn load_height(ix: i32, iy: i32, sample_w: i32) -> f32 {
-  return g_heights[u32(sample_idx(ix, iy, sample_w))];
+  return g_terrain[u32(sample_idx(ix, iy, sample_w))].w;
+}
+
+fn load_albedo(ix: i32, iy: i32, sample_w: i32) -> vec3<f32> {
+  return g_terrain[u32(sample_idx(ix, iy, sample_w))].xyz;
 }
 
 fn display_scalar_from_noise(v: f32) -> f32 {
@@ -82,6 +87,7 @@ fn vs_main(in: VsIn) -> VsOut {
   let ix = i32(round(fx));
   let iy = i32(round(fy));
   let h = load_height(ix, iy, sample_w);
+  let alb = load_albedo(ix, iy, sample_w);
   let cell = g_chunk.world_size / steps;
   let hx1 = load_height(ix + 1, iy, sample_w);
   let hx0 = load_height(ix - 1, iy, sample_w);
@@ -100,6 +106,7 @@ fn vs_main(in: VsIn) -> VsOut {
   out.uv = in.uv;
   out.debug_rgb = g_chunk.debug_rgb;
   out.dirty_flag = f32(g_chunk.dirty_flag);
+  out.v_albedo = alb;
   return out;
 }
 
@@ -108,7 +115,12 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
   let n_w = normalize(in.normal_w);
   let L = normalize(g_frame.light_dir);
   let diff = g_frame.light_ambient + g_frame.light_diffuse * max(dot(n_w, L), 0.0);
-  var albedo = ramp_color(display_scalar_from_noise(in.h_raw));
+  let has_bio = dot(in.v_albedo, in.v_albedo) > 1e-6;
+  var albedo = select(
+    ramp_color(display_scalar_from_noise(in.h_raw)),
+    in.v_albedo,
+    has_bio
+  );
   if (g_frame.color_mode == 1u) {
     albedo = in.debug_rgb;
   }

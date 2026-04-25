@@ -86,9 +86,11 @@ export function createRendererController(canvas, getState, getGraph) {
   scene.add(borderGroup);
 
   const uColorMode = { value: 0 };
+  const uTerrainShade = { value: 0 };
   const uDebugColor = { value: new Vector3(1, 1, 1) };
   const uniforms = {
     uColorMode,
+    uTerrainShade,
     uDebugColor,
     uUseGraph: { value: 0 },
     uGraphTex: { value: null },
@@ -298,6 +300,15 @@ export function createRendererController(canvas, getState, getGraph) {
   function onChunkBeforeRender() {
     const st = frameSt;
     uColorMode.value = st && st.debugColorByLod ? 1 : 0;
+    uTerrainShade.value = 0;
+    if (st && st.useGraph && st.useBiomes) {
+      const m = st.terrainVizMode || "default";
+      if (m === "blend") {
+        uTerrainShade.value = 2;
+      } else if (m === "default" || m === "color" || m === "height" || m === "biomeId" || m === "weight" || m === "placement" || m === "biomePreview") {
+        uTerrainShade.value = 1;
+      }
+    }
     if (uColorMode.value === 1) {
       const u = this.userData.ch;
       uDebugColor.value.copy(u.debugRgb);

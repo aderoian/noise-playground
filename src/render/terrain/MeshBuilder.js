@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, Float32BufferAttribute, Uint32BufferAttribute } from "three";
 import { getGraphRegistry } from "../../noise/graphBridge.js";
-import { sampleTerrainHeight } from "./NoiseGraphEvaluator.js";
+import { sampleTerrain, sampleTerrainHeight } from "./NoiseGraphEvaluator.js";
 
 const reg = getGraphRegistry();
 
@@ -74,17 +74,45 @@ export function buildChunkTerrainGeometry(cx, cy, worldSize, segments, st, tSec,
   const minY = cy * worldSize;
   const heights = new Float32Array(w * w);
   const hRaws = new Float32Array(w * w);
+  const cR = new Float32Array(w * w);
+  const cG = new Float32Array(w * w);
+  const cB = new Float32Array(w * w);
   const meshH = st.meshHeight > 1e-6 ? st.meshHeight : 1e-6;
+  const scratch = /** @type {import("../../graph/types.js").TerrainSample} */ ({
+    height: 0,
+    colorR: 0,
+    colorG: 0,
+    colorB: 0,
+    biomeId: -1,
+    biomeWeights: new Float32Array(0),
+    placementU: 0,
+    placementRaw: 0
+  });
   for (let j = 0; j < w; j++) {
     for (let i = 0; i < w; i++) {
       const wx = minX + (i / steps) * worldSize;
       const wy = minY + (j / steps) * worldSize;
-      const z = sampleTerrainHeight(wx, wy, st, tSec, graph, reg);
-      const idx = i + j * w;
-      heights[idx] = z;
-      hRaws[idx] = (z - (st.heightOffset || 0)) / meshH;
+      if (st.useGraph && st.useBiomes) {
+        sampleTerrain(wx, wy, st, tSec, graph, reg, scratch);
+        const z = scratch.height;
+        const idx = i + j * w;
+        heights[idx] = z;
+        hRaws[idx] = (z - (st.heightOffset || 0)) / meshH;
+        cR[idx] = scratch.colorR;
+        cG[idx] = scratch.colorG;
+        cB[idx] = scratch.colorB;
+      } else {
+        const z = sampleTerrainHeight(wx, wy, st, tSec, graph, reg);
+        const idx = i + j * w;
+        heights[idx] = z;
+        hRaws[idx] = (z - (st.heightOffset || 0)) / meshH;
+        cR[idx] = 0.5;
+        cG[idx] = 0.5;
+        cB[idx] = 0.5;
+      }
     }
   }
+  const hasVertexColor = true;
   const nVert = w * w;
   const pos = new Float32Array(nVert * 3);
   const hAttr = new Float32Array(nVert);
@@ -125,6 +153,19 @@ export function buildChunkTerrainGeometry(cx, cy, worldSize, segments, st, tSec,
   geom.setAttribute("normal", new Float32BufferAttribute(norms, 3));
   if (opts?.hRaw !== false) {
     geom.setAttribute("hRaw", new Float32BufferAttribute(hAttr, 1));
+  }
+  if (hasVertexColor) {
+    const arr = new Float32Array(nVert * 3);
+    for (let j = 0; j < w; j++) {
+      for (let i = 0; i < w; i++) {
+        const k = i + j * w;
+        const b = k * 3;
+        arr[b] = cR[k];
+        arr[b + 1] = cG[k];
+        arr[b + 2] = cB[k];
+      }
+    }
+    geom.setAttribute("vColor", new BufferAttribute(arr, 3));
   }
   geom.setIndex(new Uint32BufferAttribute(indices, 1));
   return {
