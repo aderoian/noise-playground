@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -32,6 +33,128 @@ function isFormFieldTarget(e) {
   );
 }
 
+const CTX_W = 220;
+const CTX_H = 320;
+
+/**
+ * @param {object} p
+ * @param {() => void} p.onPointerDownCapture
+ * @param {import("react").ReactNode} p.children
+ * @param {number} p.x
+ * @param {number} p.y
+ */
+const GraphContextMenuLayer = forwardRef(
+  /**
+   * @param {object} p
+   * @param {import("react").Ref<HTMLDivElement | null>} ref
+   */
+  function GraphContextMenuLayerInner({ onPointerDownCapture, children, x, y }, ref) {
+    const left = Math.max(8, Math.min(x, window.innerWidth - CTX_W - 8));
+    const top = Math.max(8, Math.min(y, window.innerHeight - CTX_H - 8));
+    return (
+      <div
+        ref={ref}
+        className="graph-ctx-menu"
+        style={{ left, top }}
+        role="menu"
+        onPointerDownCapture={onPointerDownCapture}
+      >
+        {children}
+      </div>
+    );
+  }
+);
+GraphContextMenuLayer.displayName = "GraphContextMenuLayer";
+
+/**
+ * @param {object} p
+ * @param {import("@xyflow/react").Node} p.node
+ * @param {import("@xyflow/react").Edge[]} p.edges
+ * @param {(id: string) => void} p.onDeleteNode
+ * @param {(nodeId: string, targetHandle: string) => void} p.onDisconnectInput
+ */
+function GraphContextMenuNode({ node, edges, onDeleteNode, onDisconnectInput }) {
+  const ins = (node.data && node.data.inputs) || [];
+  const p0 = ins[0];
+  const p1 = ins[1];
+  const has0 = p0 && edges.some((e) => e.target === node.id && e.targetHandle === p0.id);
+  const has1 = p1 && edges.some((e) => e.target === node.id && e.targetHandle === p1.id);
+  return (
+    <>
+      <button
+        type="button"
+        className="graph-ctx-menu__item"
+        role="menuitem"
+        onClick={() => onDeleteNode(node.id)}
+      >
+        Delete node
+      </button>
+      {(p0 || p1) && <div className="graph-ctx-menu__sep" role="separator" />}
+      {p0 && (
+        <button
+          type="button"
+          className="graph-ctx-menu__item"
+          role="menuitem"
+          disabled={!has0}
+          onClick={() => onDisconnectInput(node.id, p0.id)}
+        >
+          {`Disconnect ${p0.name || "input 1"}`}
+        </button>
+      )}
+      {p1 && (
+        <button
+          type="button"
+          className="graph-ctx-menu__item"
+          role="menuitem"
+          disabled={!has1}
+          onClick={() => onDisconnectInput(node.id, p1.id)}
+        >
+          {`Disconnect ${p1.name || "input 2"}`}
+        </button>
+      )}
+    </>
+  );
+}
+
+/**
+ * @param {object} p
+ * @param {import("@xyflow/react").Edge} p.edge
+ * @param {import("@xyflow/react").Node[]} p.nodes
+ * @param {() => void} p.onRemove
+ */
+function GraphContextMenuEdge({ edge, nodes, onRemove }) {
+  const sn = nodes.find((n) => n.id === edge.source);
+  const tn = nodes.find((n) => n.id === edge.target);
+  const sLabel = (sn && sn.data && sn.data.label) || edge.source;
+  const tLabel = (tn && tn.data && tn.data.label) || edge.target;
+  return (
+    <>
+      <button type="button" className="graph-ctx-menu__item" role="menuitem" onClick={onRemove}>
+        Delete path
+      </button>
+      <div className="graph-ctx-menu__sep" role="separator" />
+      <button
+        type="button"
+        className="graph-ctx-menu__item"
+        role="menuitem"
+        onClick={onRemove}
+        title={`Remove wire from the source (left): ${sLabel}`}
+      >
+        Disconnect left
+      </button>
+      <button
+        type="button"
+        className="graph-ctx-menu__item"
+        role="menuitem"
+        onClick={onRemove}
+        title={`Remove wire at the target (right): ${tLabel}`}
+      >
+        Disconnect right
+      </button>
+    </>
+  );
+}
+
 /**
  * @param {object} props
  * @param {import("../../graph/types.js").NoiseGraph} props.initialGraph
@@ -57,6 +180,13 @@ export function GraphEditor({ initialGraph, onGraphChange, onGraphFileLoaded }) 
 
   /** @type {[[string[], string[]], (v: { nodeIds: string[]; edgeIds: string[] }) => void]} */
   const [selection, setSelection] = useState({ nodeIds: [], edgeIds: [] });
+
+  const menuRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const [ctxMenu, setCtxMenu] = useState(
+    /** @type {null | { kind: "node"; nodeId: string; x: number; y: number } | { kind: "edge"; edgeId: string; x: number; y: number }} */ (
+      null
+    )
+  );
 
   const setPin = useCallback(
     (nodeId, pinId, v) => {
@@ -135,6 +265,95 @@ export function GraphEditor({ initialGraph, onGraphChange, onGraphFileLoaded }) 
     setEdges((eds) => eds.filter((e) => !idSet.has(e.id)));
   }, [selection, setEdges]);
 
+  const deleteNodeId = useCallback(
+    (nodeId) => {
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+      setCtxMenu(null);
+    },
+    [setNodes, setEdges]
+  );
+
+  const deleteEdgeIdById = useCallback(
+    (edgeId) => {
+      setEdges((eds) => eds.filter((e) => e.id !== edgeId));
+      setCtxMenu(null);
+    },
+    [setEdges]
+  );
+
+  const disconnectNodeInput = useCallback(
+    (nodeId, targetHandle) => {
+      setEdges((eds) => eds.filter((e) => !(e.target === nodeId && e.targetHandle === targetHandle)));
+      setCtxMenu(null);
+    },
+    [setEdges]
+  );
+
+  const onNodeContextMenu = useCallback(
+    /**
+     * @param {import("react").MouseEvent} e
+     * @param {import("@xyflow/react").Node} node
+     */
+    (e, node) => {
+      if (isFormFieldTarget(e)) {
+        return;
+      }
+      e.preventDefault();
+      setCtxMenu({ kind: "node", nodeId: node.id, x: e.clientX, y: e.clientY });
+    },
+    []
+  );
+
+  const onEdgeContextMenu = useCallback(
+    /**
+     * @param {import("react").MouseEvent} e
+     * @param {import("@xyflow/react").Edge} edge
+     */
+    (e, edge) => {
+      e.preventDefault();
+      setCtxMenu({ kind: "edge", edgeId: edge.id, x: e.clientX, y: e.clientY });
+    },
+    []
+  );
+
+  const onPaneContextMenu = useCallback(
+    /** @param {import("react").MouseEvent} e */
+    (e) => {
+      e.preventDefault();
+      setCtxMenu(null);
+    },
+    []
+  );
+
+  const onPaneClick = useCallback(() => {
+    setCtxMenu(null);
+  }, []);
+
+  useEffect(() => {
+    if (!ctxMenu) {
+      return;
+    }
+    const onDown = (/** @type {PointerEvent} */ e) => {
+      const m = menuRef.current;
+      if (m && e.target instanceof Node && m.contains(e.target)) {
+        return;
+      }
+      setCtxMenu(null);
+    };
+    const onKey = (/** @type {KeyboardEvent} */ e) => {
+      if (e.key === "Escape") {
+        setCtxMenu(null);
+      }
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    document.addEventListener("keydown", onKey, { capture: true });
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("keydown", onKey, { capture: true });
+    };
+  }, [ctxMenu]);
+
   useEffect(() => {
     const onKey = (e) => {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) {
@@ -177,6 +396,9 @@ export function GraphEditor({ initialGraph, onGraphChange, onGraphFileLoaded }) 
 
   const canDeleteNode = selection.nodeIds.length > 0;
   const canDeleteEdge = selection.edgeIds.length > 0;
+
+  const contextMenuNode =
+    ctxMenu && ctxMenu.kind === "node" ? nodes.find((n) => n.id === ctxMenu.nodeId) ?? null : null;
 
   return (
     <GraphActionsCtx.Provider value={act}>
@@ -312,12 +534,57 @@ export function GraphEditor({ initialGraph, onGraphChange, onGraphFileLoaded }) 
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               onSelectionChange={onSelectionChange}
+              onNodeContextMenu={onNodeContextMenu}
+              onEdgeContextMenu={onEdgeContextMenu}
+              onPaneContextMenu={onPaneContextMenu}
+              onPaneClick={onPaneClick}
               deleteKeyCode={[]}
               fitView
             >
               <Background />
               <Controls />
             </ReactFlow>
+            {ctxMenu &&
+              createPortal(
+                <GraphContextMenuLayer
+                  ref={menuRef}
+                  onPointerDownCapture={(e) => e.stopPropagation()}
+                  x={ctxMenu.x}
+                  y={ctxMenu.y}
+                >
+                  {ctxMenu.kind === "node" && contextMenuNode && (
+                    <GraphContextMenuNode
+                      node={contextMenuNode}
+                      edges={edges}
+                      onDeleteNode={deleteNodeId}
+                      onDisconnectInput={disconnectNodeInput}
+                    />
+                  )}
+                  {ctxMenu.kind === "node" && !contextMenuNode && (
+                    <div className="graph-ctx-menu__empty" role="none">
+                      Node not found
+                    </div>
+                  )}
+                  {ctxMenu.kind === "edge" && (() => {
+                    const ed = edges.find((q) => q.id === ctxMenu.edgeId);
+                    if (!ed) {
+                      return (
+                        <div className="graph-ctx-menu__empty" role="none">
+                          Path not found
+                        </div>
+                      );
+                    }
+                    return (
+                      <GraphContextMenuEdge
+                        edge={ed}
+                        nodes={nodes}
+                        onRemove={() => deleteEdgeIdById(ed.id)}
+                      />
+                    );
+                  })()}
+                </GraphContextMenuLayer>,
+                document.body
+              )}
           </ReactFlowProvider>
         </div>
       </div>

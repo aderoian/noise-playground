@@ -15,7 +15,8 @@ if (!viewCanvas || !graphRoot || !diagContent) {
 const el = (id) => document.getElementById(id);
 const renderReset = el("render-reset");
 const renderBackend = el("render-backend");
-const renderViewMode = el("render-view-mode");
+const renderModeChunk = el("render-mode-chunk");
+const renderModeWorld = el("render-mode-world");
 const renderChunkView = el("render-chunk-view");
 const renderOffsetX = el("render-offset-x");
 const renderOffsetXNum = el("render-offset-x-num");
@@ -46,15 +47,17 @@ const viewportStatsFps = el("viewport-stats-fps");
 const viewportStatsPos = el("viewport-stats-pos");
 const graphPanelMinimize = el("graph-panel-minimize");
 const graphPanelRestore = el("graph-panel-restore");
+const viewportMinimize = el("viewport-minimize");
+const viewportRestore = el("viewport-restore");
 const renderPanel = el("render-panel");
 const renderPanelClose = el("render-panel-close");
-const renderPanelMinimize = el("render-panel-minimize");
 const renderPanelRestore = el("render-panel-restore");
 
 if (
   !renderReset ||
   !renderBackend ||
-  !renderViewMode ||
+  !renderModeChunk ||
+  !renderModeWorld ||
   !renderChunkView ||
   !renderOffsetX ||
   !renderOffsetXNum ||
@@ -85,9 +88,10 @@ if (
   !viewportStatsPos ||
   !graphPanelMinimize ||
   !graphPanelRestore ||
+  !viewportMinimize ||
+  !viewportRestore ||
   !renderPanel ||
   !renderPanelClose ||
-  !renderPanelMinimize ||
   !renderPanelRestore
 ) {
   throw new Error("Missing render panel or viewport UI in DOM");
@@ -116,6 +120,8 @@ let state = { ...createDefaultState(), noiseGraph: createDefaultGraph() };
 let lastRafT = performance.now();
 let fpsEma = 0;
 let lastGraphW = "480px";
+/** Graph column width before hiding the preview (restore when showing preview again). */
+let lastGraphWWhenPreviewVisible = "480px";
 
 /**
  * @returns {number}
@@ -199,12 +205,20 @@ function syncRenderPanelFromState() {
   setPairFloat(/** @type {HTMLInputElement} */ (renderRebuild), /** @type {HTMLInputElement} */ (renderRebuildNum), state.maxChunkRebuildsPerFrame);
   /** @type {HTMLSelectElement} */ (renderPreset).value = normalizeRenderPresetKey(state.renderPreset);
   /** @type {HTMLSelectElement} */ (renderBackend).value = state.terrainBackend;
-  /** @type {HTMLSelectElement} */ (renderViewMode).value = state.rendererViewMode;
+  syncViewModeButtons();
   /** @type {HTMLInputElement} */ (renderLod).checked = state.lodEnabled;
   /** @type {HTMLInputElement} */ (debugBorders).checked = state.debugShowChunkBorders;
   /** @type {HTMLInputElement} */ (debugDirty).checked = state.debugShowDirtyChunks;
   /** @type {HTMLInputElement} */ (debugLod).checked = state.debugColorByLod;
   /** @type {HTMLInputElement} */ (debugShaderPreview).checked = state.debugShowShaderPreview;
+}
+
+function syncViewModeButtons() {
+  const m = state.rendererViewMode;
+  /** @type {HTMLButtonElement} */ (renderModeChunk).setAttribute("aria-pressed", m === "chunk" ? "true" : "false");
+  /** @type {HTMLButtonElement} */ (renderModeWorld).setAttribute("aria-pressed", m === "world" ? "true" : "false");
+  renderModeChunk.classList.toggle("viewport-mode-btn--active", m === "chunk");
+  renderModeWorld.classList.toggle("viewport-mode-btn--active", m === "world");
 }
 
 function updateRenderPanelMode() {
@@ -304,12 +318,20 @@ bindRangeNumberPair(
   const v = /** @type {HTMLSelectElement} */ (e.target).value;
   applyRenderPatch({ renderPreset: v });
 });
-/** @type {HTMLSelectElement} */ (renderViewMode).addEventListener("change", (e) => {
-  const v = /** @type {HTMLSelectElement} */ (e.target).value;
-  if (v === "world" || v === "chunk") {
+/**
+ * @param {"chunk" | "world"} v
+ */
+function setRendererViewModeFromUi(v) {
+  if (v !== state.rendererViewMode) {
     const next = (state.chunkReloadSeq | 0) + 1;
     applyRenderPatch({ rendererViewMode: v, chunkReloadSeq: next });
   }
+}
+/** @type {HTMLButtonElement} */ (renderModeChunk).addEventListener("click", () => {
+  setRendererViewModeFromUi("chunk");
+});
+/** @type {HTMLButtonElement} */ (renderModeWorld).addEventListener("click", () => {
+  setRendererViewModeFromUi("world");
 });
 /** @type {HTMLSelectElement} */ (renderChunkView).addEventListener("change", (e) => {
   const raw = /** @type {HTMLSelectElement} */ (e.target).value;
@@ -380,34 +402,51 @@ graphPanelRestore.addEventListener("click", () => {
   window.dispatchEvent(new Event("resize"));
 });
 
-renderPanelMinimize.addEventListener("click", () => {
-  const rp = /** @type {HTMLElement} */ (renderPanel);
-  if (rp.classList.contains("render-panel--hidden")) {
+viewportMinimize.addEventListener("click", () => {
+  if (isMobileLayout()) {
     return;
   }
-  rp.classList.toggle("render-panel--rolled");
-  const rolled = rp.classList.contains("render-panel--rolled");
-  renderPanelMinimize.setAttribute("aria-expanded", rolled ? "false" : "true");
-  renderPanelMinimize.textContent = rolled ? "Expand" : "Minimize";
+  const root = document.documentElement;
+  let w = root.style.getPropertyValue("--graph-w") || `${readLayoutGraphW()}px`;
+  w = w.trim();
+  if (!w || w === "0px") {
+    w = `${readLayoutGraphW()}px`;
+  }
+  lastGraphWWhenPreviewVisible = w;
+  document.body.classList.add("app-viewport-minimized");
+  /** @type {HTMLElement} */ (viewportRestore).hidden = false;
+  viewportRestore.setAttribute("aria-hidden", "false");
+  /** @type {HTMLButtonElement} */ (viewportMinimize).setAttribute("aria-expanded", "false");
   schedule();
+  window.dispatchEvent(new Event("resize"));
+});
+
+viewportRestore.addEventListener("click", () => {
+  document.body.classList.remove("app-viewport-minimized");
+  if (!isMobileLayout()) {
+    document.documentElement.style.setProperty("--graph-w", lastGraphWWhenPreviewVisible);
+  }
+  /** @type {HTMLElement} */ (viewportRestore).hidden = true;
+  viewportRestore.setAttribute("aria-hidden", "true");
+  /** @type {HTMLButtonElement} */ (viewportMinimize).setAttribute("aria-expanded", "true");
+  viewCanvas.focus({ preventScroll: true });
+  schedule();
+  window.dispatchEvent(new Event("resize"));
 });
 
 function closeRenderOptions() {
   const rp = /** @type {HTMLElement} */ (renderPanel);
-  rp.classList.add("render-panel--hidden", "render-panel--rolled");
+  rp.classList.add("render-panel--hidden");
   /** @type {HTMLElement} */ (renderPanelRestore).hidden = false;
   renderPanelRestore.setAttribute("aria-hidden", "false");
-  renderPanelMinimize.setAttribute("aria-expanded", "false");
   schedule();
 }
 
 function openRenderOptions() {
   const rp = /** @type {HTMLElement} */ (renderPanel);
-  rp.classList.remove("render-panel--hidden", "render-panel--rolled");
+  rp.classList.remove("render-panel--hidden");
   /** @type {HTMLElement} */ (renderPanelRestore).hidden = true;
   renderPanelRestore.setAttribute("aria-hidden", "true");
-  renderPanelMinimize.setAttribute("aria-expanded", "true");
-  renderPanelMinimize.textContent = "Minimize";
   viewCanvas.focus({ preventScroll: true });
   schedule();
 }
@@ -462,6 +501,15 @@ window.addEventListener(
     }
     e.preventDefault();
     keys.add(e.code);
+    if (
+      state.rendererViewMode === "world" &&
+      document.activeElement !== viewCanvas &&
+      !e.repeat
+    ) {
+      if (e.code === "KeyW" || e.code === "KeyA" || e.code === "KeyS" || e.code === "KeyD" || e.code.startsWith("Arrow")) {
+        viewCanvas.focus({ preventScroll: true });
+      }
+    }
     schedule();
   },
   { passive: false }
@@ -529,25 +577,38 @@ document.addEventListener("mousemove", (e) => {
 });
 
 let raf = 0;
-function shouldKeepRaf() {
-  if (state.animate) {
-    return true;
-  }
-  if (!isViewportKeyTarget()) {
-    return false;
-  }
-  if (state.rendererViewMode === "chunk") {
-    for (const k of keys) {
-      if (k === "KeyW" || k === "KeyA" || k === "KeyS" || k === "KeyD" || k.startsWith("Arrow")) {
-        return true;
-      }
+function hasChunkPanKeyHeld() {
+  for (const k of keys) {
+    if (k === "KeyW" || k === "KeyA" || k === "KeyS" || k === "KeyD" || k.startsWith("Arrow")) {
+      return true;
     }
-    return false;
   }
+  return false;
+}
+
+function hasWorldMoveKeyHeld() {
   for (const k of keys) {
     if (k === "KeyW" || k === "KeyA" || k === "KeyS" || k === "KeyD") {
       return true;
     }
+  }
+  return false;
+}
+
+/**
+ * Keep the RAF loop alive for streaming terrain / mouselook. Do not require
+ * isViewportKeyTarget() here: focus can differ from the canvas (e.g. after graph UI)
+ * while movement keys are still in `keys`, which would stop chunk sync for held W.
+ */
+function shouldKeepRaf() {
+  if (state.animate) {
+    return true;
+  }
+  if (state.rendererViewMode === "chunk" && hasChunkPanKeyHeld()) {
+    return true;
+  }
+  if (state.rendererViewMode === "world" && hasWorldMoveKeyHeld()) {
+    return true;
   }
   return document.pointerLockElement === viewCanvas;
 }

@@ -34,6 +34,11 @@ body {
 }
 
 /* Full-viewport WebGL: to the right of the graph column */
+.viewport-wrap.viewport-fullscreen {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 .viewport-fullscreen {
   position: fixed;
   top: 0;
@@ -42,6 +47,140 @@ body {
   left: var(--graph-w);
   z-index: 0;
   background: #000;
+}
+.viewport-chrome {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  padding: 0.3rem 0.45rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(12, 15, 20, 0.97);
+  z-index: 4;
+}
+.viewport-chrome__side {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.viewport-chrome__side--end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.viewport-chrome__center {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+  background: #0d1117;
+}
+.viewport-mode-btn {
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.32rem 0.75rem;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1.2;
+}
+.viewport-mode-btn:hover {
+  color: var(--text);
+  background: rgba(88, 166, 255, 0.12);
+}
+.viewport-mode-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  z-index: 1;
+}
+.viewport-mode-btn + .viewport-mode-btn {
+  border-left: 1px solid var(--border);
+}
+.viewport-mode-btn--active {
+  color: var(--text);
+  background: #1c2330;
+  font-weight: 600;
+}
+.viewport-chrome__btn {
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0.22rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #1c2128;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+.viewport-chrome__btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.viewport-chrome__tab {
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.28rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: rgba(15, 19, 24, 0.95);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+}
+.viewport-chrome__tab:hover {
+  border-color: var(--accent);
+}
+.viewport-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+body.app-viewport-minimized #viewport-wrap,
+body.app-viewport-minimized #split-graph-view {
+  display: none !important;
+}
+/* Hide preview column: let the graph use the full width (same idea as graph minimize in reverse). */
+body.app-viewport-minimized:not(.app-graph-minimized) .graph-panel {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+body.app-viewport-minimized:not(.app-graph-minimized) .diagnostics,
+body.app-viewport-minimized:not(.app-graph-minimized) .splitter--horizontal {
+  left: 0;
+  max-width: 100%;
+}
+.viewport-panel__restore {
+  position: fixed;
+  z-index: 6;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.45rem 0.4rem;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.35);
+}
+.viewport-panel__restore:hover {
+  border-color: var(--accent);
 }
 body.layout-dragging {
   user-select: none;
@@ -165,10 +304,6 @@ body.layout-dragging--h * {
   font-size: 0.78rem;
   transition: max-height 0.15s ease;
 }
-.render-panel--rolled {
-  max-height: 2.4rem;
-  overflow: hidden;
-}
 .render-panel--hidden {
   display: none !important;
 }
@@ -199,24 +334,6 @@ body.layout-dragging--h * {
 }
 .render-panel__icon-btn:hover {
   color: var(--text);
-  border-color: var(--accent);
-}
-.render-panel__tab {
-  position: absolute;
-  z-index: 3;
-  top: 0.45rem;
-  right: 0.45rem;
-  font: inherit;
-  font-size: 0.72rem;
-  padding: 0.3rem 0.55rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: rgba(15, 19, 24, 0.95);
-  color: var(--text);
-  cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-}
-.render-panel__tab:hover {
   border-color: var(--accent);
 }
 .viewport-stats {
@@ -549,6 +666,55 @@ body.app-graph-minimized #split-graph-view {
 }
 .graph-editor__flow .react-flow {
   background: #0a0c10;
+}
+
+.graph-ctx-menu {
+  position: fixed;
+  z-index: 10010;
+  min-width: 11rem;
+  max-width: 16rem;
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(22, 27, 34, 0.98);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+.graph-ctx-menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.45rem;
+  margin: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.graph-ctx-menu__item:hover:not(:disabled) {
+  background: rgba(88, 166, 255, 0.15);
+}
+.graph-ctx-menu__item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.graph-ctx-menu__item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+.graph-ctx-menu__sep {
+  height: 1px;
+  margin: 0.25rem 0;
+  background: var(--border);
+  border: none;
+  padding: 0;
+}
+.graph-ctx-menu__empty {
+  font-size: 0.75rem;
+  color: var(--muted);
+  padding: 0.35rem 0.45rem;
 }
 .graph-editor__details {
   border-top: 1px solid var(--border);

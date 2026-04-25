@@ -53,6 +53,56 @@
         tabindex="0"
       ></div>
       <div class="viewport-wrap viewport-fullscreen" id="viewport-wrap">
+        <header class="viewport-chrome" aria-label="Preview toolbar">
+          <div class="viewport-chrome__side" aria-hidden="true"></div>
+          <div
+            class="viewport-chrome__center"
+            role="group"
+            aria-label="Render view mode"
+          >
+            <button
+              type="button"
+              class="viewport-mode-btn"
+              id="render-mode-chunk"
+              title="Single-chunk height preview"
+              aria-pressed="true"
+            >
+              Chunk
+            </button>
+            <button
+              type="button"
+              class="viewport-mode-btn"
+              id="render-mode-world"
+              title="Streamed world terrain"
+              aria-pressed="false"
+            >
+              World
+            </button>
+          </div>
+          <div class="viewport-chrome__side viewport-chrome__side--end">
+            <button
+              type="button"
+              class="viewport-chrome__btn"
+              id="viewport-minimize"
+              title="Minimize preview"
+              aria-expanded="true"
+              aria-controls="viewport-wrap"
+            >
+              Minimize
+            </button>
+            <button
+              type="button"
+              class="viewport-chrome__tab"
+              id="render-panel-restore"
+              title="Open render settings"
+              hidden
+              aria-hidden="true"
+            >
+              Render Settings
+            </button>
+          </div>
+        </header>
+        <div class="viewport-stage">
         <div
           class="viewport-stats"
           id="viewport-stats"
@@ -61,16 +111,6 @@
           <span id="viewport-stats-fps">— fps</span>
           <span id="viewport-stats-pos">pos —</span>
         </div>
-        <button
-          type="button"
-          class="render-panel__tab"
-          id="render-panel-restore"
-          title="Open render options"
-          hidden
-          aria-hidden="true"
-        >
-          Render
-        </button>
         <canvas
           id="view"
           tabindex="0"
@@ -82,24 +122,14 @@
           aria-label="Render and preview options"
         >
           <div class="render-panel__head-row">
-            <h2 class="render-panel__title">Render</h2>
+            <h2 class="render-panel__title">Render settings</h2>
             <div class="render-panel__head-actions">
-              <button
-                type="button"
-                class="render-panel__icon-btn"
-                id="render-panel-minimize"
-                title="Minimize options"
-                aria-expanded="true"
-                aria-controls="render-panel"
-              >
-                Minimize
-              </button>
               <button
                 type="button"
                 class="render-panel__icon-btn"
                 id="render-panel-close"
                 title="Close panel (use tab to reopen)"
-                aria-label="Close render options"
+                aria-label="Close render settings"
               >
                 ×
               </button>
@@ -111,17 +141,6 @@
               <option value="auto">Auto</option>
               <option value="webgpu">WebGPU</option>
               <option value="cpu">CPU fallback</option>
-            </select>
-          </label>
-          <label class="render-panel__row">
-            <span class="render-panel__label">View</span>
-            <select
-              id="render-view-mode"
-              class="control-select"
-              aria-label="View mode: chunk snapshot or world streaming"
-            >
-              <option value="chunk">Chunk</option>
-              <option value="world">World</option>
             </select>
           </label>
           <div class="render-panel__row">
@@ -394,7 +413,18 @@
             </select>
           </label>
         </aside>
+        </div>
       </div>
+      <button
+        type="button"
+        class="viewport-panel__restore"
+        id="viewport-restore"
+        title="Show preview"
+        hidden
+        aria-hidden="true"
+      >
+        Preview
+      </button>
       <div
         class="splitter splitter--horizontal"
         id="split-diag"
